@@ -1,0 +1,66 @@
+README
+
+Test particle tracing code, designed to work with TRISTAN outputs...
+
+Started 2020 July 16.... use Python first, but maybe move to C++ or Julia,
+just as a learning project for a new language + GPU programming
+
+    python -m line_profiler asdf.py.lprof
+
+interp3d
+    https://github.com/jglaser/interp3d.git
+    but strip out the READM and extra stuff
+
+    modified interp_3d.py line 1 to be "from .interp3d", not "from .interp"
+
+
+
+Question: how do we interpret field dimf wrt particle coordinates?
+==================================================================
+2020 July 24
+    
+output.F90:interpolfld = exact same procedure as in mover...
+    
+fields.F90
+
+    mx0 = INPUTmx0 + 5
+    my0 = INPUTmy0 + 5
+    mx = mx0
+    my = (my0-5)/sizey + 5
+    mzlast, mylast = ...
+
+output.F90
+
+    dimsf = mx0-5, my0-5, mz0-5
+    
+    jstart = 3
+    jfinish = my-3
+    istart = 3
+    ifinish = mx-3
+
+    do k=kstart,kfinish,istep
+        nz = (k-kstart)/istep + 1
+        do j=jstart,jfinish,istep
+            ny=(j-jstart)/istep + 1
+            do i=istart,ifinish,istep
+                nx=(i-istart)/istep + 1
+                
+                call interpolfld(real(i), real(j), real(k), ...)
+                temporary1(nx,ny,nz) = (stuff)
+    
+    i=istart = 3,                  then nx = 1
+    i=ifinish = mx-3 = INPUTmx0+2, then nx = mx-5, so this basically spans dimsf
+        
+OK, so fields are sampled at 3,4,...,INPUTmx0+2 (TRISTAN internal coordinates)
+
+particles reside within:
+
+    x \in [??, ??]  <- modified by injector and wall
+    y \in [3, dimsf+3 = mx-5+3 = mx-2 = INPUTmy0+3], or [3, INPUTmy0+3]
+    z \in [3, 4]
+
+particle file position of (3,3,3) is same as flds file index (0,0,0).
+mark.py subtracts NGHOST=3 off of all particle coordinates.
+interpolated fields live at "lower left" corner of grid, wrt volume where particles can live.
+
+Verdict: for trochograph.py, take 0th field value and replicate that at very end to be our "GHOST" interp region.
