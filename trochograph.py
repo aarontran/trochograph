@@ -13,12 +13,9 @@ from __future__ import division, print_function
 from datetime import datetime
 import numpy as np
 import os
-#from os import path
 
 import h5py
 import numba
-#from scipy.interpolate import interpn, RegularGridInterpolator
-#from interp3d import interp_3d
 
 class Fields(object):
     pass
@@ -28,7 +25,6 @@ class Particles(object):
     pass
 
 
-#def run_trochograph(p,flds,par,user_prtl_bc):
 def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     """Main execution loop of trochograph"""
 
@@ -47,7 +43,13 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     c           = par['c']
     qm          = par['qm']
 
-    assert len(p.x.shape) == 1
+    for arr in [p.x, p.y, p.z, p.u, p.v, p.w]:
+        assert arr.ndim  == 1
+        assert arr.dtype.kind == 'f'
+    for arr in [flds.ex, flds.ey, flds.ez, flds.bx, flds.by, flds.bz]:
+        assert arr.ndim  == 3
+        assert arr.dtype.kind == 'f'
+
     tprint("  lapst =",lapst, "last =",last)
     tprint("  flds shape =", flds.ex.shape)
     tprint("  prtl number =", p.x.size)
@@ -79,6 +81,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     t1 = datetime.now()
     tlaptot = 0
     tlaprestmov = 0
+    tlaprestbc = 0
     tlaprestout = 0
     tlapfirst = 0
 
@@ -94,34 +97,40 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
             p.ex,p.ey,p.ez,p.bx,p.by,p.bz,
             qm,c
         )
-        user_prtl_bc(p,flds.ex.shape)
 
         tlap1 = datetime.now()
 
-        fwrote = output(p,par,lap)
+        user_prtl_bc(p,flds.ex.shape)
 
         tlap2 = datetime.now()
 
+        fwrote = output(p,par,lap)
+
+        tlap3 = datetime.now()
+
         # lap stdout and time accounting
 
-        dtlap1_0 = (tlap1-tlap0).total_seconds()
+        dtlap1_0 = (tlap1-tlap0).total_seconds()  # deltas
         dtlap2_1 = (tlap2-tlap1).total_seconds()
-        dtlap2_0 = (tlap2-tlap0).total_seconds()
+        dtlap3_2 = (tlap3-tlap2).total_seconds()
+        dtlap3_0 = (tlap3-tlap0).total_seconds()  # total
 
-        tprint("  move {:.3e} out {:.3e} tot {:.3e}".format(
+        tprint("  move {:.3e} bc {:.3e} out {:.3e} tot {:.3e}".format(
             dtlap1_0,
             dtlap2_1,
-            dtlap2_0,
+            dtlap3_2,
+            dtlap3_0,
         ))
         if fwrote:
             tprint("  wrote", fwrote)
 
-        tlaptot += dtlap2_0
+        tlaptot += dtlap3_0
         if lap == lapst+1:
-            tlapfirst = dtlap2_0
+            tlapfirst = dtlap3_0
         else:
             tlaprestmov += dtlap1_0
-            tlaprestout += dtlap2_1
+            tlaprestbc += dtlap2_1
+            tlaprestout += dtlap3_2
 
     # -----------------------------------------
     # finalize
@@ -134,6 +143,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("    first lap", tlapfirst)
     tprint("    rest laps", tlaptot - tlapfirst)
     tprint("      rest mover", tlaprestmov)
+    tprint("      rest bc", tlaprestbc)
     tprint("      rest output", tlaprestout)
 
     tprint("Numba threading")
@@ -274,22 +284,21 @@ def interp(fld,x,y,z):
         fld value(s) at x,y,z
     """
 
-    #f=fld.flatten(order='F')  # match buneman's convention
     #ix=1
     #iy=fld.shape[0]
     #iz=fld.shape[0]*fld.shape[1]
+    #f=fld.flatten(order='F')  # match buneman's convention
 
     # numba only supports C ordering...
     # but for a 2-D x-y run with shape[2]==2, interpolation with C-ordering is
     # actually more contiguous in memory.  but idk if contiguity matters,
     # I think compilers can optimize for strided access too...
-    f=np.ravel(fld)#,order='C')  # ravel=view, flatten=copy
     ix=fld.shape[1]*fld.shape[2]
     iy=fld.shape[2]
     iz=1
+    f=np.ravel(fld)#,order='C')  # ravel=view, flatten=copy
 
-    # in case user gives int arrays, casting can result in rather subtle errors
-    fout=np.empty_like(x, dtype=np.float64)
+    fout=np.empty_like(x)
 
     for ip in range(x.size):
         i=int(x[ip])
