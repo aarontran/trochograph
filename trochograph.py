@@ -159,7 +159,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     return
 
 
-@numba.njit(cache=True)#fastmath=True)#cache=True,parallel=True)
+@numba.njit(parallel=True)#fastmath=True)#cache=True,parallel=True)
 def mover(
         bx,by,bz,ex,ey,ez,
         px,py,pz,pu,pv,pw,
@@ -171,102 +171,233 @@ def mover(
 
     cinv=1./c
 
-    # TRISTAN mover uses (0.25*qm) for E fld, (0.125*qm*cinv) for B fld
-    # TRISTAN interp includes 2x, 4x factors respectively
-    # due to Yee mesh edge/face-centering for E/B flds, see Buneman's comments
-    # whereas trochograph uses vertex-centered flds, hence 0.5*qm, 0.5*qm*cinv
+    # Fortran/TRISTAN indexing convention
+    #ix=1
+    #iy=fld.shape[0]
+    #iz=fld.shape[0]*fld.shape[1]
 
-    # E-component interpolations:
-    ex0 = interp(ex,px,py,pz) * 0.5*qm
-    ey0 = interp(ey,px,py,pz) * 0.5*qm
-    ez0 = interp(ez,px,py,pz) * 0.5*qm
-    # B-component interpolations:
-    bx0 = interp(bx,px,py,pz) * 0.5*qm*cinv
-    by0 = interp(by,px,py,pz) * 0.5*qm*cinv
-    bz0 = interp(bz,px,py,pz) * 0.5*qm*cinv
+    # numba only supports C ordering...
+    # but for a 2-D x-y run with shape[2]==2, interpolation with C-ordering is
+    # actually more contiguous in memory.  but idk if contiguity matters,
+    # I think compilers can optimize for strided access too...
+    ix=ex.shape[1]*ex.shape[2]
+    iy=ex.shape[2]
+    iz=1
+    exview=np.ravel(ex)#,order='C')  # ravel=view, flatten=copy
+    eyview=np.ravel(ey)#,order='C')  # ravel=view, flatten=copy
+    ezview=np.ravel(ez)#,order='C')  # ravel=view, flatten=copy
+    bxview=np.ravel(bx)#,order='C')  # ravel=view, flatten=copy
+    byview=np.ravel(by)#,order='C')  # ravel=view, flatten=copy
+    bzview=np.ravel(bz)#,order='C')  # ravel=view, flatten=copy
 
-    # First half electric acceleration, with relativity's gamma:
-    u0 = c*pu+ex0
-    v0 = c*pv+ey0
-    w0 = c*pw+ez0
+    for ip in numba.prange(px.size):
 
-    # START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
-    ev = ex0*u0+ey0*v0+ez0*w0  # first part of Edotv work in mover
-    evx = ex0*u0
-    evy = ey0*v0
-    evz = ez0*w0
-    # END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+        # Linearly interpolate fields to prtl positions
+        # particle domain is:
+        #   x in [0, fld.shape[0]-1)
+        #   y in [0, fld.shape[1]-1)
+        #   z in [0, fld.shape[2]-1)
+        # if using prtl.tot coordinates
 
-    # First half magnetic rotation, with relativity's gamma:
-    g = c/(c**2+u0**2+v0**2+w0**2)**0.5
-    bx0 = g*bx0
-    by0 = g*by0
-    bz0 = g*bz0
-    f = 2./(1.+bx0*bx0+by0*by0+bz0*bz0)
-    u1 = (u0+v0*bz0-w0*by0)*f
-    v1 = (v0+w0*bx0-u0*bz0)*f
-    w1 = (w0+u0*by0-v0*bx0)*f
-    ## Second half mag. rot'n & el. acc'n:
-    #u0 = u0 + v1*bz0-w1*by0+ex0
-    #v0 = v0 + w1*bx0-u1*bz0+ey0
-    #w0 = w0 + u1*by0-v1*bx0+ez0
+        i=int(px[ip])
+        dx=px[ip]-i
+        j=int(py[ip])
+        dy=py[ip]-j
+        k=int(pz[ip])
+        dz=pz[ip]-k
+        #l=i+iy*(j-1)+iz*(k-1)  # fortran 1-based index
+        #l=i+iy*j+iz*k  # fortran column-major ordering
+        l=i*ix+j*iy+k*iz  # row-major ordering
 
-    # break {second half mag. rot'n & el. acc'n} into two pieces
-    # in order to compute diagnostic E \cdot v
-    # without E dot v diagnostic, we would normally do all in one chunk
+        # TRISTAN mover uses (0.25*qm) for E fld, (0.125*qm*cinv) for B fld
+        # TRISTAN interp includes 2x, 4x factors respectively
+        # due to Yee mesh edge/face-centering for E/B flds, see Buneman's comments
+        # whereas trochograph uses vertex-centered flds, hence 0.5*qm, 0.5*qm*cinv
 
-    # Second half mag. rot'n
-    u0=u0+v1*bz0-w1*by0
-    v0=v0+w1*bx0-u1*bz0
-    w0=w0+u1*by0-v1*bx0
+        # Field interpolations are tri-linear (linear in x times linear in y
+        # times linear in z). This amounts to the 3-D generalisation of "area
+        # weighting".
+        ex0 = (
+              (1.-dx)*(1.-dy)*(1.-dz)*exview[l]
+            +     dx *(1.-dy)*(1.-dz)*exview[l+ix]
+            + (1.-dx)*    dy *(1.-dz)*exview[l+iy]
+            +     dx *    dy *(1.-dz)*exview[l+ix+iy]
+            + (1.-dx)*(1.-dy)*    dz *exview[l+iz]
+            +     dx *(1.-dy)*    dz *exview[l+ix+iz]
+            + (1.-dx)*    dy *    dz *exview[l+iy+iz]
+            +     dx *    dy *    dz *exview[l+ix+iy+iz]
+        ) * 0.5*qm
 
-    # START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
-    # E_prll \cdot v = (E \cdot B) (B \cdot v) / B^2
-    # Restore 2x to ex0 and remove Lorentz gamma.
-    # v_prll, Lorentz gamma are unchanged by mag rotation,
-    # so OK to compute either before or after.
-    evprl = 2*(ex0*bx0+ey0*by0+ez0*bz0) * g*(bx0*u0+by0*v0+bz0*w0) / (bx0**2+by0**2+bz0**2)
-    pwprl[:] = pwprl + evprl*cinv*cinv  # store as dimensionless Lorentz gamma
+        ey0 = (
+              (1.-dx)*(1.-dy)*(1.-dz)*eyview[l]
+            +     dx *(1.-dy)*(1.-dz)*eyview[l+ix]
+            + (1.-dx)*    dy *(1.-dz)*eyview[l+iy]
+            +     dx *    dy *(1.-dz)*eyview[l+ix+iy]
+            + (1.-dx)*(1.-dy)*    dz *eyview[l+iz]
+            +     dx *(1.-dy)*    dz *eyview[l+ix+iz]
+            + (1.-dx)*    dy *    dz *eyview[l+iy+iz]
+            +     dx *    dy *    dz *eyview[l+ix+iy+iz]
+        ) * 0.5*qm
 
-    # E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
-    ev = g*(ev + ex0*u0+ey0*v0+ez0*w0)  # second part, remove Lorentz gamma
-    pwtot[:] = pwtot + ev*cinv*cinv  # store as dimensionless Lorentz gamma
+        ez0 = (
+              (1.-dx)*(1.-dy)*(1.-dz)*ezview[l]
+            +     dx *(1.-dy)*(1.-dz)*ezview[l+ix]
+            + (1.-dx)*    dy *(1.-dz)*ezview[l+iy]
+            +     dx *    dy *(1.-dz)*ezview[l+ix+iy]
+            + (1.-dx)*(1.-dy)*    dz *ezview[l+iz]
+            +     dx *(1.-dy)*    dz *ezview[l+ix+iz]
+            + (1.-dx)*    dy *    dz *ezview[l+iy+iz]
+            +     dx *    dy *    dz *ezview[l+ix+iy+iz]
+        ) * 0.5*qm
 
-    evx = g*(evx + ex0*u0)
-    evy = g*(evy + ey0*v0)
-    evz = g*(evz + ez0*w0)
-    pwx[:] = pwx + evx*cinv*cinv
-    pwy[:] = pwy + evy*cinv*cinv
-    pwz[:] = pwz + evz*cinv*cinv
-    # END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+        bx0 = (
+              (1.-dx)*(1.-dy)*(1.-dz)*bxview[l]
+            +     dx *(1.-dy)*(1.-dz)*bxview[l+ix]
+            + (1.-dx)*    dy *(1.-dz)*bxview[l+iy]
+            +     dx *    dy *(1.-dz)*bxview[l+ix+iy]
+            + (1.-dx)*(1.-dy)*    dz *bxview[l+iz]
+            +     dx *(1.-dy)*    dz *bxview[l+ix+iz]
+            + (1.-dx)*    dy *    dz *bxview[l+iy+iz]
+            +     dx *    dy *    dz *bxview[l+ix+iy+iz]
+        ) * 0.5*qm*cinv
 
-    # Second half el. acc'n:
-    u0=u0+ex0
-    v0=v0+ey0
-    w0=w0+ez0
+        by0 = (
+              (1.-dx)*(1.-dy)*(1.-dz)*byview[l]
+            +     dx *(1.-dy)*(1.-dz)*byview[l+ix]
+            + (1.-dx)*    dy *(1.-dz)*byview[l+iy]
+            +     dx *    dy *(1.-dz)*byview[l+ix+iy]
+            + (1.-dx)*(1.-dy)*    dz *byview[l+iz]
+            +     dx *(1.-dy)*    dz *byview[l+ix+iz]
+            + (1.-dx)*    dy *    dz *byview[l+iy+iz]
+            +     dx *    dy *    dz *byview[l+ix+iy+iz]
+        ) * 0.5*qm*cinv
 
-    # Normalized 4-velocity advance:
-    pu[:] = u0*cinv
-    pv[:] = v0*cinv
-    pw[:] = w0*cinv
-    # Position advance:
-    g = c/(c**2+u0**2+v0**2+w0**2)**0.5
-    px[:] = px + pu*g*c
-    py[:] = py + pv*g*c
-    pz[:] = pz + pw*g*c
+        bz0 = (
+              (1.-dx)*(1.-dy)*(1.-dz)*bzview[l]
+            +     dx *(1.-dy)*(1.-dz)*bzview[l+ix]
+            + (1.-dx)*    dy *(1.-dz)*bzview[l+iy]
+            +     dx *    dy *(1.-dz)*bzview[l+ix+iy]
+            + (1.-dx)*(1.-dy)*    dz *bzview[l+iz]
+            +     dx *(1.-dy)*    dz *bzview[l+ix+iz]
+            + (1.-dx)*    dy *    dz *bzview[l+iy+iz]
+            +     dx *    dy *    dz *bzview[l+ix+iy+iz]
+        ) * 0.5*qm*cinv
 
-    # Save fields used (NOTICE THAT THERE'S AN OFFSET!!!!!... fields used at PREVIOUS LOCATION, or "in-between" locations if you like)
-    pex[:] = ex0 / (0.5*qm)
-    pey[:] = ey0 / (0.5*qm)
-    pez[:] = ez0 / (0.5*qm)
-    pbx[:] = bx0 / (0.5*qm*cinv)
-    pby[:] = by0 / (0.5*qm*cinv)
-    pbz[:] = bz0 / (0.5*qm*cinv)
+        #print("interp: x,y,z=",px[ip],py[ip],pz[ip])
+        #print("interp: i,j,k=",i,j,k)
+        #print("interp: dx,dy,dz=",dx,dy,dz)
+        #print()
+        #print("interp: l         =", l           )
+        #print("interp: l+ix      =", l+ix        )
+        #print("interp: l+iy      =", l+iy        )
+        #print("interp: l+ix+iy   =", l+ix+iy     )
+        #print("interp: l+iz      =", l+iz        )
+        #print("interp: l+ix+iz   =", l+ix+iz     )
+        #print("interp: l+iy+iz   =", l+iy+iz     )
+        #print("interp: l+ix+iy+iz=", l+ix+iy+iz  )
+        #print()
+        #print("interp: ex[l]         =", exview[l]           )
+        #print("interp: ex[l+ix]      =", exview[l+ix]        )
+        #print("interp: ex[l+iy]      =", exview[l+iy]        )
+        #print("interp: ex[l+ix+iy]   =", exview[l+ix+iy]     )
+        #print("interp: ex[l+iz]      =", exview[l+iz]        )
+        #print("interp: ex[l+ix+iz]   =", exview[l+ix+iz]     )
+        #print("interp: ex[l+iy+iz]   =", exview[l+iy+iz]     )
+        #print("interp: ex[l+ix+iy+iz]=", exview[l+ix+iy+iz]  )
+        #print("interp: ex[l]          wt=", (1.-dx)*(1.-dy)*(1.-dz) )
+        #print("interp: ex[l+ix]       wt=",     dx *(1.-dy)*(1.-dz) )
+        #print("interp: ex[l+iy]       wt=", (1.-dx)*    dy *(1.-dz) )
+        #print("interp: ex[l+ix+iy]    wt=",     dx *    dy *(1.-dz) )
+        #print("interp: ex[l+iz]       wt=", (1.-dx)*(1.-dy)*    dz  )
+        #print("interp: ex[l+ix+iz]    wt=",     dx *(1.-dy)*    dz  )
+        #print("interp: ex[l+iy+iz]    wt=", (1.-dx)*    dy *    dz  )
+        #print("interp: ex[l+ix+iy+iz] wt=",     dx *    dy *    dz  )
+        #print()
+        #print("interp: ex0=", ex0)
+
+
+        # First half electric acceleration, with relativity's gamma:
+        u0 = c*pu[ip]+ex0
+        v0 = c*pv[ip]+ey0
+        w0 = c*pw[ip]+ez0
+
+        # START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+        ev = ex0*u0+ey0*v0+ez0*w0  # first part of Edotv work in mover
+        evx = ex0*u0
+        evy = ey0*v0
+        evz = ez0*w0
+        # END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+
+        # First half magnetic rotation, with relativity's gamma:
+        g = c/(c**2+u0**2+v0**2+w0**2)**0.5
+        bx0 = g*bx0
+        by0 = g*by0
+        bz0 = g*bz0
+        f = 2./(1.+bx0*bx0+by0*by0+bz0*bz0)
+        u1 = (u0+v0*bz0-w0*by0)*f
+        v1 = (v0+w0*bx0-u0*bz0)*f
+        w1 = (w0+u0*by0-v0*bx0)*f
+        ## Second half mag. rot'n & el. acc'n:
+        #u0 = u0 + v1*bz0-w1*by0+ex0
+        #v0 = v0 + w1*bx0-u1*bz0+ey0
+        #w0 = w0 + u1*by0-v1*bx0+ez0
+
+        # break {second half mag. rot'n & el. acc'n} into two pieces
+        # in order to compute diagnostic E \cdot v
+        # without E dot v diagnostic, we would normally do all in one chunk
+
+        # Second half mag. rot'n
+        u0=u0+v1*bz0-w1*by0
+        v0=v0+w1*bx0-u1*bz0
+        w0=w0+u1*by0-v1*bx0
+
+        # START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+        # E_prll \cdot v = (E \cdot B) (B \cdot v) / B^2
+        # Restore 2x to ex0 and remove Lorentz gamma.
+        # v_prll, Lorentz gamma are unchanged by mag rotation,
+        # so OK to compute either before or after.
+        evprl = 2*(ex0*bx0+ey0*by0+ez0*bz0) * g*(bx0*u0+by0*v0+bz0*w0) / (bx0**2+by0**2+bz0**2)
+        pwprl[ip] = pwprl[ip] + evprl*cinv*cinv  # store as dimensionless Lorentz gamma
+
+        # E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+        ev = g*(ev + ex0*u0+ey0*v0+ez0*w0)  # second part, remove Lorentz gamma
+        pwtot[ip] = pwtot[ip] + ev*cinv*cinv  # store as dimensionless Lorentz gamma
+
+        evx = g*(evx + ex0*u0)
+        evy = g*(evy + ey0*v0)
+        evz = g*(evz + ez0*w0)
+        pwx[ip] = pwx[ip] + evx*cinv*cinv
+        pwy[ip] = pwy[ip] + evy*cinv*cinv
+        pwz[ip] = pwz[ip] + evz*cinv*cinv
+        # END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+
+        # Second half el. acc'n:
+        u0=u0+ex0
+        v0=v0+ey0
+        w0=w0+ez0
+
+        # Normalized 4-velocity advance:
+        pu[ip] = u0*cinv
+        pv[ip] = v0*cinv
+        pw[ip] = w0*cinv
+        # Position advance:
+        g = c/(c**2+u0**2+v0**2+w0**2)**0.5
+        px[ip] = px[ip] + pu[ip]*g*c
+        py[ip] = py[ip] + pv[ip]*g*c
+        pz[ip] = pz[ip] + pw[ip]*g*c
+
+        # Save fields used (NOTICE THAT THERE'S AN OFFSET!!!!!... fields used at PREVIOUS LOCATION, or "in-between" locations if you like)
+        pex[ip] = ex0 / (0.5*qm)
+        pey[ip] = ey0 / (0.5*qm)
+        pez[ip] = ez0 / (0.5*qm)
+        pbx[ip] = bx0 / (0.5*qm*cinv)
+        pby[ip] = by0 / (0.5*qm*cinv)
+        pbz[ip] = bz0 / (0.5*qm*cinv)
 
     return
 
 
-@numba.njit(cache=True)#fastmath=True)#cache=True,parallel=True)
+@numba.njit()#fastmath=True)#cache=True,parallel=True)
 def interp(fld,x,y,z):
     """Linearly interpolate fld to input x,y,z position(s)
 
