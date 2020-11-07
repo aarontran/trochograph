@@ -58,13 +58,13 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
     tprint("Get prtl starting flds for initial output")
     # E-component interpolations:
-    p.ex = interp5(flds.ex,p.x,p.y,p.z)
-    p.ey = interp5(flds.ey,p.x,p.y,p.z)
-    p.ez = interp5(flds.ez,p.x,p.y,p.z)
+    p.ex = interp(flds.ex,p.x,p.y,p.z)
+    p.ey = interp(flds.ey,p.x,p.y,p.z)
+    p.ez = interp(flds.ez,p.x,p.y,p.z)
     # B-component interpolations:
-    p.bx = interp5(flds.bx,p.x,p.y,p.z)
-    p.by = interp5(flds.by,p.x,p.y,p.z)
-    p.bz = interp5(flds.bz,p.x,p.y,p.z)
+    p.bx = interp(flds.bx,p.x,p.y,p.z)
+    p.by = interp(flds.by,p.x,p.y,p.z)
+    p.bz = interp(flds.bz,p.x,p.y,p.z)
 
 
     tprint("Initial output")
@@ -87,8 +87,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
         tlap0 = datetime.now()
         tprint("Lap {:10d}".format(lap),end='')
 
-        #mover(p,flds,qm,c)
-        mover2(
+        mover(
             flds.bx,flds.by,flds.bz,flds.ex,flds.ey,flds.ez,
             p.x,p.y,p.z,p.u,p.v,p.w,
             p.wtot,p.wprl,p.wx,p.wy,p.wz,
@@ -144,112 +143,14 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("  THREADING_LAYER", numba.config.THREADING_LAYER)
     tprint("  threading_layer()", numba.threading_layer())
 
-    #interp5.parallel_diagnostics(level=4)
-    #mover2.parallel_diagnostics(level=4)
+    #interp.parallel_diagnostics(level=4)
+    #mover.parallel_diagnostics(level=4)
 
     return
 
 
-def mover(p,flds,qm,c):
-    """Boris particle mover"""
-
-    cinv=1./c
-
-    ## E-component interpolations:
-    #ex0 = interp(flds.ex,p.x,p.y,p.z) * 0.25*qm
-    #ey0 = interp(flds.ey,p.x,p.y,p.z) * 0.25*qm
-    #ez0 = interp(flds.ez,p.x,p.y,p.z) * 0.25*qm
-    ## B-component interpolations:
-    #bx0 = interp(flds.bx,p.x,p.y,p.z) * 0.125*qm*cinv
-    #by0 = interp(flds.by,p.x,p.y,p.z) * 0.125*qm*cinv
-    #bz0 = interp(flds.bz,p.x,p.y,p.z) * 0.125*qm*cinv
-
-    # E-component interpolations:
-    ex0 = interp5(flds.ex,p.x,p.y,p.z) * 0.5*qm
-    ey0 = interp5(flds.ey,p.x,p.y,p.z) * 0.5*qm
-    ez0 = interp5(flds.ez,p.x,p.y,p.z) * 0.5*qm
-    # B-component interpolations:
-    bx0 = interp5(flds.bx,p.x,p.y,p.z) * 0.5*qm*cinv
-    by0 = interp5(flds.by,p.x,p.y,p.z) * 0.5*qm*cinv
-    bz0 = interp5(flds.bz,p.x,p.y,p.z) * 0.5*qm*cinv
-
-    # First half electric acceleration, with relativity's gamma:
-    u0 = c*p.u+ex0
-    v0 = c*p.v+ey0
-    w0 = c*p.w+ez0
-
-    # --- START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
-    ev = ex0*u0+ey0*v0+ez0*w0  # first part of Edotv work in mover
-    evx = ex0*u0
-    evy = ey0*v0
-    evz = ez0*w0
-    # --- END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
-
-    # First half magnetic rotation, with relativity's gamma:
-    g = c/(c**2+u0**2+v0**2+w0**2)**0.5
-    bx0 = g*bx0
-    by0 = g*by0
-    bz0 = g*bz0
-    f = 2./(1.+bx0*bx0+by0*by0+bz0*bz0)
-    u1 = (u0+v0*bz0-w0*by0)*f
-    v1 = (v0+w0*bx0-u0*bz0)*f
-    w1 = (w0+u0*by0-v0*bx0)*f
-    ## Second half mag. rot'n & el. acc'n:
-    #u0 = u0 + v1*bz0-w1*by0+ex0
-    #v0 = v0 + w1*bx0-u1*bz0+ey0
-    #w0 = w0 + u1*by0-v1*bx0+ez0
-
-    # break {second half mag. rot'n & el. acc'n} into two pieces
-    # in order to compute diagnostic E \cdot v
-    # without E dot v diagnostic, we would normally do all in one chunk
-
-    # Second half mag. rot'n
-    u0=u0+v1*bz0-w1*by0
-    v0=v0+w1*bx0-u1*bz0
-    w0=w0+u1*by0-v1*bx0
-
-    # --- START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
-    # E_prll \cdot v = (E \cdot B) (B \cdot v) / B^2
-    # Restore 2x to ex0 and remove Lorentz gamma.
-    # v_prll, Lorentz gamma are unchanged by mag rotation,
-    # so OK to compute either before or after.
-    evprl = 2*(ex0*bx0+ey0*by0+ez0*bz0) * g*(bx0*u0+by0*v0+bz0*w0) / (bx0**2+by0**2+bz0**2)
-    p.wprl = p.wprl + evprl*cinv*cinv  # store as dimensionless Lorentz gamma
-
-    # E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
-    ev = g*(ev + ex0*u0+ey0*v0+ez0*w0)  # second part, remove Lorentz gamma
-    p.wtot = p.wtot + ev*cinv*cinv  # store as dimensionless Lorentz gamma
-
-    evx = g*(evx + ex0*u0)
-    evy = g*(evy + ey0*v0)
-    evz = g*(evz + ez0*w0)
-    p.wx = p.wx + evx*cinv*cinv
-    p.wy = p.wy + evy*cinv*cinv
-    p.wz = p.wz + evz*cinv*cinv
-    # --- END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
-
-    # Second half el. acc'n:
-    u0=u0+ex0
-    v0=v0+ey0
-    w0=w0+ez0
-
-    # Normalized 4-velocity advance:
-    p.u = u0*cinv
-    p.v = v0*cinv
-    p.w = w0*cinv
-    # Position advance:
-    g = c/(c**2+u0**2+v0**2+w0**2)**0.5
-    p.x = p.x + p.u*g*c
-    p.y = p.y + p.v*g*c
-    p.z = p.z + p.w*g*c
-
-    return
-
-
-# up-front compile time is big!!  (~10 seconds),
-# but this dramatically cuts mover time from ~{4-6}e-4 to {1-1.5}e-4 sec per particle-lap
-@numba.njit()#cache=True,parallel=True)
-def mover2(
+@numba.njit(cache=True)#fastmath=True)#cache=True,parallel=True)
+def mover(
         bx,by,bz,ex,ey,ez,
         px,py,pz,pu,pv,pw,
         pwtot,pwprl,pwx,pwy,pwz,
@@ -260,35 +161,31 @@ def mover2(
 
     cinv=1./c
 
-    ## E-component interpolations:
-    #ex0 = interp(flds.ex,p.x,p.y,p.z) * 0.25*qm  # TRISTAN interp has 2x factor due to Yee mesh edge-centering; see Buneman's comments
-    #ey0 = interp(flds.ey,p.x,p.y,p.z) * 0.25*qm
-    #ez0 = interp(flds.ez,p.x,p.y,p.z) * 0.25*qm
-    ## B-component interpolations:
-    #bx0 = interp(flds.bx,p.x,p.y,p.z) * 0.125*qm*cinv  # TRISTAN interp has 4x factor due to Yee mesh face-centering; see Buneman's comments
-    #by0 = interp(flds.by,p.x,p.y,p.z) * 0.125*qm*cinv
-    #bz0 = interp(flds.bz,p.x,p.y,p.z) * 0.125*qm*cinv
+    # TRISTAN mover uses (0.25*qm) for E fld, (0.125*qm*cinv) for B fld
+    # TRISTAN interp includes 2x, 4x factors respectively
+    # due to Yee mesh edge/face-centering for E/B flds, see Buneman's comments
+    # whereas trochograph uses vertex-centered flds, hence 0.5*qm, 0.5*qm*cinv
 
     # E-component interpolations:
-    ex0 = interp5(ex,px,py,pz) * 0.5*qm
-    ey0 = interp5(ey,px,py,pz) * 0.5*qm
-    ez0 = interp5(ez,px,py,pz) * 0.5*qm
+    ex0 = interp(ex,px,py,pz) * 0.5*qm
+    ey0 = interp(ey,px,py,pz) * 0.5*qm
+    ez0 = interp(ez,px,py,pz) * 0.5*qm
     # B-component interpolations:
-    bx0 = interp5(bx,px,py,pz) * 0.5*qm*cinv
-    by0 = interp5(by,px,py,pz) * 0.5*qm*cinv
-    bz0 = interp5(bz,px,py,pz) * 0.5*qm*cinv
+    bx0 = interp(bx,px,py,pz) * 0.5*qm*cinv
+    by0 = interp(by,px,py,pz) * 0.5*qm*cinv
+    bz0 = interp(bz,px,py,pz) * 0.5*qm*cinv
 
     # First half electric acceleration, with relativity's gamma:
     u0 = c*pu+ex0
     v0 = c*pv+ey0
     w0 = c*pw+ez0
 
-    # --- START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
+    # START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
     ev = ex0*u0+ey0*v0+ez0*w0  # first part of Edotv work in mover
     evx = ex0*u0
     evy = ey0*v0
     evz = ez0*w0
-    # --- END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
+    # END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
 
     # First half magnetic rotation, with relativity's gamma:
     g = c/(c**2+u0**2+v0**2+w0**2)**0.5
@@ -313,7 +210,7 @@ def mover2(
     v0=v0+w1*bx0-u1*bz0
     w0=w0+u1*by0-v1*bx0
 
-    # --- START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
+    # START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
     # E_prll \cdot v = (E \cdot B) (B \cdot v) / B^2
     # Restore 2x to ex0 and remove Lorentz gamma.
     # v_prll, Lorentz gamma are unchanged by mag rotation,
@@ -331,7 +228,7 @@ def mover2(
     pwx[:] = pwx + evx*cinv*cinv
     pwy[:] = pwy + evy*cinv*cinv
     pwz[:] = pwz + evz*cinv*cinv
-    # --- END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
+    # END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
 
     # Second half el. acc'n:
     u0=u0+ex0
@@ -359,121 +256,8 @@ def mover2(
     return
 
 
-#def interp(fld,x,y,z):
-#    """Linearly interpolate fld to input x,y,z position(s)
-#    Inputs:
-#        fld = scalar fld, dimensions must match
-#        x, y, z = position(s) in TRISTAN code units
-#            If using prtl.tot coords, you must subtract off ghost cells.
-#    Output:
-#        fld value(s) at x,y,z
-#    """
-#    # x, y, z coords for a regular grid
-#    #gridp = (np.arange(0, fld.shape[0]),
-#    #         np.arange(0, fld.shape[1]),
-#    #         np.arange(0, fld.shape[2]))
-#
-#    # x, y, z coords for a regular grid with periodic edges attached
-#    gridp = (np.arange( 0, fld.shape[0]    ),
-#             np.arange(-1, fld.shape[1] + 1),
-#             np.arange(-1, fld.shape[2] + 1))
-#
-#    # tack periodic edges onto cross-shock y- and z-dimension
-#    # WARNING TODO this assumes a certain set of user prtl BCs...
-#    fldp = np.concatenate((fld[:,-1:,:], fld, fld[:,0:1,:]), axis=1)
-#    fldp = np.concatenate((fldp[:,:,-1:], fldp, fldp[:,:,0:1]), axis=2)
-#
-#    return interpn(gridp,  # shapes are (m1,), (m2,), (m3,)
-#                   fldp,  # shape is (m1, m2, m3)
-#                   np.array([x, y, z]).T,  # shape is (anything, 3)
-#                   method='linear')  # returns shape (anything)
-
-
-#global interper
-#interper = {}
-#def interp2(fld,x,y,z,name=None):
-#    if name not in interper:
-#        # x, y, z coords for a regular grid with periodic edges attached
-#        gridp = (np.arange( 0, fld.shape[0]    ),
-#                 np.arange(-1, fld.shape[1] + 1),
-#                 np.arange(-1, fld.shape[2] + 1))
-#        # tack periodic edges onto cross-shock y- and z-dimension
-#        # WARNING TODO this assumes a certain set of user prtl BCs...
-#        fldp = np.concatenate((fld[:,-1:,:], fld, fld[:,0:1,:]), axis=1)
-#        fldp = np.concatenate((fldp[:,:,-1:], fldp, fldp[:,:,0:1]), axis=2)
-#        interper[name] = RegularGridInterpolator(
-#            gridp,  # shapes are (m1,), (m2,), (m3,)
-#            fldp,  # shape is (m1, m2, m3)
-#            method='linear',
-#        )
-#    myfldinterper = interper[name]
-#    dat = np.array([x,y,z]).T  # might be inefficient
-#    return myfldinterper(dat)
-
-
-#global interper
-#interper = {}
-#def interp3(fld,x,y,z,name=None):
-#    if name not in interper:
-#        # x, y, z coords for a regular grid with periodic edges attached
-#        gridp = (np.arange( 0, fld.shape[0]    ),
-#                 np.arange(-1, fld.shape[1] + 1),
-#                 np.arange(-1, fld.shape[2] + 1))
-#        # tack periodic edges onto cross-shock y- and z-dimension
-#        # WARNING TODO this assumes a certain set of user prtl BCs...
-#        fldp = np.concatenate((fld[:,-1:,:], fld, fld[:,0:1,:]), axis=1)
-#        fldp = np.concatenate((fldp[:,:,-1:], fldp, fldp[:,:,0:1]), axis=2)
-#        interper[name] = interp_3d.Interp3D(
-#            fldp,  # shape is (m1, m2, m3)
-#            gridp[0],  # shapes are (m1,), (m2,), (m3,)
-#            gridp[1],
-#            gridp[2],
-#        )
-#    myfldinterper = interper[name]
-#    #dat = np.array([x,y,z]).T  # might be inefficient
-#    #return myfldinterper(dat)
-#    return myfldinterper((x,y,z))
-
-
-#def interp4(fld,x,y,z):
-#    """Linearly interpolate fld to input x,y,z position(s)
-#    Inputs:
-#        fld = scalar fld, dimensions must match
-#        x, y, z = position(s) in TRISTAN code units
-#            If using prtl.tot coords, you must subtract off ghost cells.
-#    Output:
-#        fld value(s) at x,y,z
-#    """
-#    i=x.astype(np.int)
-#    dx=x-i
-#    j=y.astype(np.int)
-#    dy=y-j
-#    k=z.astype(np.int)
-#    dz=z-k
-#
-#    ix=1
-#    iy=fld.shape[0]
-#    iz=fld.shape[0]*fld.shape[1]
-#    l=i+iy*(j-1)+iz*(k-1)
-#
-#    # Field interpolations are tri-linear (linear in x times linear in y
-#    # times linear in z). This amounts to the 3-D generalisation of "area
-#    # weighting".
-#    f=fld.flatten(order='F')  # match buneman's convention
-#    return (
-#            (1-dx)*(1-dy)*(1-dz)*f[l]
-#          +    dx *(1-dy)*(1-dz)*f[l+ix]
-#          + (1-dx)*   dy *(1-dz)*f[l+iy]
-#          +    dx *   dy *(1-dz)*f[l+ix+iy]
-#          + (1-dx)*(1-dy)*   dz *f[l+iz]
-#          +    dx *(1-dy)*   dz *f[l+ix+iz]
-#          + (1-dx)*   dy *   dz *f[l+iy+iz]
-#          +    dx *   dy *   dz *f[l+ix+iy+iz]
-#    )
-
-
-@numba.njit()#cache=True,parallel=True)
-def interp5(fld,x,y,z):
+@numba.njit(cache=True)#fastmath=True)#cache=True,parallel=True)
+def interp(fld,x,y,z):
     """Linearly interpolate fld to input x,y,z position(s)
 
     Particle x,y,z has domain:
@@ -489,9 +273,6 @@ def interp5(fld,x,y,z):
     Output:
         fld value(s) at x,y,z
     """
-    #assert len(x.shape) == 1
-    #assert x.shape == y.shape
-    #assert x.shape == z.shape
 
     #f=fld.flatten(order='F')  # match buneman's convention
     #ix=1
@@ -507,7 +288,8 @@ def interp5(fld,x,y,z):
     iy=fld.shape[2]
     iz=1
 
-    fout=np.empty_like(x, dtype=np.float64)  # in case user happens to give all ints, casting can result in rather subtle errors
+    # in case user gives int arrays, casting can result in rather subtle errors
+    fout=np.empty_like(x, dtype=np.float64)
 
     for ip in range(x.size):
         i=int(x[ip])
@@ -534,37 +316,37 @@ def interp5(fld,x,y,z):
             +     dx *    dy *    dz *f[l+ix+iy+iz]
         )
 
-        #print("interp5: x,y,z=",x[ip],y[ip],z[ip])
-        #print("interp5: i,j,k=",i,j,k)
-        #print("interp5: dx,dy,dz=",dx,dy,dz)
+        #print("interp: x,y,z=",x[ip],y[ip],z[ip])
+        #print("interp: i,j,k=",i,j,k)
+        #print("interp: dx,dy,dz=",dx,dy,dz)
         #print()
-        #print("interp5: l         =", l           )
-        #print("interp5: l+ix      =", l+ix        )
-        #print("interp5: l+iy      =", l+iy        )
-        #print("interp5: l+ix+iy   =", l+ix+iy     )
-        #print("interp5: l+iz      =", l+iz        )
-        #print("interp5: l+ix+iz   =", l+ix+iz     )
-        #print("interp5: l+iy+iz   =", l+iy+iz     )
-        #print("interp5: l+ix+iy+iz=", l+ix+iy+iz  )
+        #print("interp: l         =", l           )
+        #print("interp: l+ix      =", l+ix        )
+        #print("interp: l+iy      =", l+iy        )
+        #print("interp: l+ix+iy   =", l+ix+iy     )
+        #print("interp: l+iz      =", l+iz        )
+        #print("interp: l+ix+iz   =", l+ix+iz     )
+        #print("interp: l+iy+iz   =", l+iy+iz     )
+        #print("interp: l+ix+iy+iz=", l+ix+iy+iz  )
         #print()
-        #print("interp5: f[l]         =", f[l]           )
-        #print("interp5: f[l+ix]      =", f[l+ix]        )
-        #print("interp5: f[l+iy]      =", f[l+iy]        )
-        #print("interp5: f[l+ix+iy]   =", f[l+ix+iy]     )
-        #print("interp5: f[l+iz]      =", f[l+iz]        )
-        #print("interp5: f[l+ix+iz]   =", f[l+ix+iz]     )
-        #print("interp5: f[l+iy+iz]   =", f[l+iy+iz]     )
-        #print("interp5: f[l+ix+iy+iz]=", f[l+ix+iy+iz]  )
-        #print("interp5: f[l]          weight=", (1.-dx)*(1.-dy)*(1.-dz) )
-        #print("interp5: f[l+ix]       weight=",     dx *(1.-dy)*(1.-dz) )
-        #print("interp5: f[l+iy]       weight=", (1.-dx)*    dy *(1.-dz) )
-        #print("interp5: f[l+ix+iy]    weight=",     dx *    dy *(1.-dz) )
-        #print("interp5: f[l+iz]       weight=", (1.-dx)*(1.-dy)*    dz  )
-        #print("interp5: f[l+ix+iz]    weight=",     dx *(1.-dy)*    dz  )
-        #print("interp5: f[l+iy+iz]    weight=", (1.-dx)*    dy *    dz  )
-        #print("interp5: f[l+ix+iy+iz] weight=",     dx *    dy *    dz  )
+        #print("interp: f[l]         =", f[l]           )
+        #print("interp: f[l+ix]      =", f[l+ix]        )
+        #print("interp: f[l+iy]      =", f[l+iy]        )
+        #print("interp: f[l+ix+iy]   =", f[l+ix+iy]     )
+        #print("interp: f[l+iz]      =", f[l+iz]        )
+        #print("interp: f[l+ix+iz]   =", f[l+ix+iz]     )
+        #print("interp: f[l+iy+iz]   =", f[l+iy+iz]     )
+        #print("interp: f[l+ix+iy+iz]=", f[l+ix+iy+iz]  )
+        #print("interp: f[l]          weight=", (1.-dx)*(1.-dy)*(1.-dz) )
+        #print("interp: f[l+ix]       weight=",     dx *(1.-dy)*(1.-dz) )
+        #print("interp: f[l+iy]       weight=", (1.-dx)*    dy *(1.-dz) )
+        #print("interp: f[l+ix+iy]    weight=",     dx *    dy *(1.-dz) )
+        #print("interp: f[l+iz]       weight=", (1.-dx)*(1.-dy)*    dz  )
+        #print("interp: f[l+ix+iz]    weight=",     dx *(1.-dy)*    dz  )
+        #print("interp: f[l+iy+iz]    weight=", (1.-dx)*    dy *    dz  )
+        #print("interp: f[l+ix+iy+iz] weight=",     dx *    dy *    dz  )
         #print()
-        #print("interp5: fout=", fout[ip])
+        #print("interp: fout=", fout[ip])
 
     return fout
 
@@ -582,42 +364,28 @@ def output(p,par,lap):
     n = int(lap/interval) - int(pltstart/interval)  # starts at 0000
     fname = "output/troch.{:04d}".format(n)
 
-    # savez_compressed is really slow;
-    # savez is really big.  Only use for testing/debugging etc
-#    np.savez_compressed(
-#    np.savez(
-#        fname,
-#        x=p.x, y=p.y, z=p.z,
-#        u=p.u, v=p.v, w=p.w,
-#        proc=p.proc, ind=p.ind,
-#        # --- START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
-#        wtot=p.wtot, wprl=p.wprl, wx=p.wx, wy=p.wy, wz=p.wz,
-#        # --- END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
-#    )
-
-    # gzip doesn't help much
     with h5py.File(fname, "w") as f:
-        f.create_dataset("x", data=p.x)#, compression="gzip")
-        f.create_dataset("y", data=p.y)#, compression="gzip")
-        f.create_dataset("z", data=p.z)#, compression="gzip")
-        f.create_dataset("u", data=p.u)#, compression="gzip")
-        f.create_dataset("v", data=p.v)#, compression="gzip")
-        f.create_dataset("w", data=p.w)#, compression="gzip")
-        f.create_dataset("proc", data=p.proc)#, compression="gzip")
-        f.create_dataset("ind", data=p.ind)#, compression="gzip")
-        # --- START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
-        f.create_dataset("wtot", data=p.wtot)#, compression="gzip")
-        f.create_dataset("wprl", data=p.wprl)#, compression="gzip")
-        f.create_dataset("wx", data=p.wx)#, compression="gzip")
-        f.create_dataset("wy", data=p.wy)#, compression="gzip")
-        f.create_dataset("wz", data=p.wz)#, compression="gzip")
-        # --- END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2 ---
-        f.create_dataset("bx", data=p.bx)#, compression="gzip")
-        f.create_dataset("by", data=p.by)#, compression="gzip")
-        f.create_dataset("bz", data=p.bz)#, compression="gzip")
-        f.create_dataset("ex", data=p.ex)#, compression="gzip")
-        f.create_dataset("ey", data=p.ey)#, compression="gzip")
-        f.create_dataset("ez", data=p.ez)#, compression="gzip")
+        f.create_dataset("x", data=p.x)
+        f.create_dataset("y", data=p.y)
+        f.create_dataset("z", data=p.z)
+        f.create_dataset("u", data=p.u)
+        f.create_dataset("v", data=p.v)
+        f.create_dataset("w", data=p.w)
+        f.create_dataset("proc", data=p.proc)
+        f.create_dataset("ind", data=p.ind)
+        # START DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+        f.create_dataset("wtot", data=p.wtot)
+        f.create_dataset("wprl", data=p.wprl)
+        f.create_dataset("wx", data=p.wx)
+        f.create_dataset("wy", data=p.wy)
+        f.create_dataset("wz", data=p.wz)
+        # END DIAGNOSTIC E \cdot v = E \cdot (v_{pre-rot} + v_{post-rot})/2
+        f.create_dataset("bx", data=p.bx)
+        f.create_dataset("by", data=p.by)
+        f.create_dataset("bz", data=p.bz)
+        f.create_dataset("ex", data=p.ex)
+        f.create_dataset("ey", data=p.ey)
+        f.create_dataset("ez", data=p.ez)
 
     return fname
 

@@ -184,9 +184,6 @@ def user_prtl_bc(p, dimf):
     assert not np.any(xleft)# and not np.any(xright)  # assume prtl don't escape
     assert not np.any(xright)  # assume prtl don't escape
 
-    #inity = np.copy(p.y)
-    #initz = np.copy(p.z)
-
     # y boundary condition
     p.y = np.mod(p.y, dimf[1]-1)
 
