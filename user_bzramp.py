@@ -1,19 +1,18 @@
 #!/usr/bin/env python
 """
-trochograph is a test particle tracing code designed to work nicely with
-TRISTAN-MP flds and prtl outputs.  Charged particles in uniform fields follow
-trochoid trajectories, hence "trochograph", a wheel-curve drawing program.
---Aaron Tran, 2020 July 16
+user_{...}.py is the main user-facing interface to trochograph, a test-particle
+tracing program.  This user file serves as both
+* configuration: user specifies input parameters, fields, particles, and
+  particle boundary conditions
+* main program: calls run_trochograph(...) to start the evolution loop.
 
-trochograph_user.py should be altered by the user to fit their needs.
-The user specifies particles, fields, and boundary conditions.
+Usage:
+
+    NUMBA_NUM_THREADS={xx} python user_{...}.py
 
 Coordinates:
-* x \in [0, dimf[0]), y \in [0, dimf[1]), z \in [0, dimf[2])
+* Periodic domains: x \in [0, dimf[0]), y \in [0, dimf[1]), z \in [0, dimf[2])
 * No yee mesh for fields
-
-todo idk what to do about offset issues
-todo this is trivially parallelizable...
 """
 
 from __future__ import division, print_function

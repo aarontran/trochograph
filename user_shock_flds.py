@@ -1,19 +1,18 @@
 #!/usr/bin/env python
 """
-trochograph is a test particle tracing code designed to work nicely with
-TRISTAN-MP flds and prtl outputs.  Charged particles in uniform fields follow
-trochoid trajectories, hence "trochograph", a wheel-curve drawing program.
---Aaron Tran, 2020 July 16
+user_{...}.py is the main user-facing interface to trochograph, a test-particle
+tracing program.  This user file serves as both
+* configuration: user specifies input parameters, fields, particles, and
+  particle boundary conditions
+* main program: calls run_trochograph(...) to start the evolution loop.
 
-trochograph_user.py should be altered by the user to fit their needs.
-The user specifies particles, fields, and boundary conditions.
+Usage:
+
+    NUMBA_NUM_THREADS={xx} python user_{...}.py
 
 Coordinates:
-* x \in [0, dimf[0]), y \in [0, dimf[1]), z \in [0, dimf[2])
+* Periodic domains: x \in [0, dimf[0]), y \in [0, dimf[1]), z \in [0, dimf[2])
 * No yee mesh for fields
-
-todo idk what to do about offset issues
-todo this is trivially parallelizable...
 """
 
 from __future__ import division, print_function
@@ -75,7 +74,9 @@ def user_flds(par):
     """
     tflds = SCENE.flds('b','e', xsel=slice(None,3500))#slice(3000,4500))
 
-    # I think mark reads in with C ordering already, but force just to be safe
+    # I think mark reads as Fortran (column-major) ordered array stored as
+    # [z,y,x] contiguous; Python-level axis transpose to [x,y,z] is a view.
+    # So force C ordering in memory.
     # row- vs column-order seems to affect numba+interp performance at ~10% level  (~3e-4 vs 3.5e-4, for 1000 prtl on dimf=(100+1,10+1,1+1))
     flds = Fields()
     flds.ex = np.ascontiguousarray(tflds['e'][0])

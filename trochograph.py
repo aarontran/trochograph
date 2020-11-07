@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 """
-trochograph is a test particle tracing code designed to work nicely with
-TRISTAN-MP flds and prtl outputs.  Charged particles in uniform fields follow
-trochoid trajectories, hence "trochograph", a wheel-curve drawing program.
---Aaron Tran, 2020 July 16
-
-trochograph_mainloop.py contains routines for moving particles and stuff
+Body of code for the program trochograph:
+main evolution loop, mover, field interpolation, outputs.
+To start a simulation run, call the method run_trochograph(...).
 """
 
 from __future__ import division, print_function
