@@ -11,11 +11,11 @@ trochograph_mainloop.py contains routines for moving particles and stuff
 from __future__ import division, print_function
 
 from datetime import datetime
+import h5py
+import numba
 import numpy as np
 import os
 
-import h5py
-import numba
 
 class Fields(object):
     pass
@@ -56,7 +56,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("  qm =", par['qm'])
 
     tprint("Pre-enforce prtl BCs")
-    user_prtl_bc(p,flds.ex.shape)
+    user_prtl_bc(p.x,p.y,p.z,flds.ex.shape)
 
     tprint("Get prtl starting flds for initial output")
     # E-component interpolations:
@@ -100,7 +100,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
         tlap1 = datetime.now()
 
-        user_prtl_bc(p,flds.ex.shape)
+        user_prtl_bc(p.x,p.y,p.z,flds.ex.shape)
 
         tlap2 = datetime.now()
 
@@ -159,7 +159,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     return
 
 
-@numba.njit(parallel=True)#fastmath=True)#cache=True,parallel=True)
+@numba.njit(cache=True,fastmath=True,parallel=True)
 def mover(
         bx,by,bz,ex,ey,ez,
         px,py,pz,pu,pv,pw,
@@ -397,7 +397,7 @@ def mover(
     return
 
 
-@numba.njit()#fastmath=True)#cache=True,parallel=True)
+@numba.njit(cache=True,fastmath=True,parallel=True)
 def interp(fld,x,y,z):
     """Linearly interpolate fld to input x,y,z position(s)
 
@@ -431,7 +431,7 @@ def interp(fld,x,y,z):
 
     fout=np.empty_like(x)
 
-    for ip in range(x.size):
+    for ip in numba.prange(x.size):
         i=int(x[ip])
         dx=x[ip]-i
         j=int(y[ip])

@@ -17,6 +17,7 @@ todo this is trivially parallelizable...
 """
 
 from __future__ import division, print_function
+import numba
 import numpy as np
 #import matplotlib.pyplot as plt
 
@@ -167,29 +168,25 @@ def user_prtl(par):
     return p
 
 
-def user_prtl_bc(p, dimf):
+@numba.njit(parallel=True)
+def user_prtl_bc(px, py, pz, dimf):
     """Given p, dimf; update p according to desired BCs for dimf"""
-
-    # x boundary condition
-    # user_shock_twowalls.F90 sets leftwall=15 with NGHOST=3, so we use x=12
-    #xleft = p.x < 12
-    xleft = p.x < 0
-    xright = p.x > dimf[0]-1
-    #p.x[xleft] = np.nan  # not sure if this will play nice
-    #p.y[xleft] = np.nan
-    #p.z[xleft] = np.nan
-    assert not np.any(xleft)# and not np.any(xright)  # assume prtl don't escape
-    assert not np.any(xright)  # assume prtl don't escape
-
-    #inity = np.copy(p.y)
-    #initz = np.copy(p.z)
-
-    # y boundary condition
-    p.y = np.mod(p.y, dimf[1]-1)
-
-    # z boundary condition
-    p.z = np.mod(p.z, dimf[2]-1)
-
+    for ip in numba.prange(px.size):
+        # x boundary condition - enforce no prtl exit domain
+        # user_shock_twowalls.F90 sets leftwall=15, so x=12 for us
+        # (fortran 1-based indexing and 2 ghost cells)
+        #assert px[ip] >= 0             # asserts prevent numba parallelism
+        #assert px[ip] <= dimf[0] - 1
+        if px[ip] < 0 or px[ip] > dimf[0]-1:
+            px[ip] = np.nan
+        # y periodic boundary condition
+        #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
+        if py[ip] > (dimf[1]-1):
+            py[ip] = py[ip] - (dimf[1]-1)
+        # z periodic boundary condition
+        #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
+        if pz[ip] > (dimf[2]-1):
+            pz[ip] = pz[ip] - (dimf[2]-1)
     return
 
 
