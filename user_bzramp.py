@@ -20,6 +20,7 @@ from __future__ import division, print_function
 import numba
 import numpy as np
 #import matplotlib.pyplot as plt
+from os import path
 
 from trochograph import Fields, Particles, run_trochograph, tprint
 
@@ -81,9 +82,8 @@ def user_input():
 
     #####################
     # store the things we actually need in rest of code
-
     par['qm'] = qme
-    par['Binit'] = Binit
+    par['Binit'] = Binit  # not actually used by mover, but hitchike onto dict to get Binit value into user_flds, user_prtl
 
     return par
 
@@ -174,4 +174,5 @@ def user_prtl_bc(px, py, pz, dimf):
 
 
 if __name__ == '__main__':
+    print("Trochograph started from:", path.basename(__file__))
     run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc)

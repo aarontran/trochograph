@@ -19,6 +19,7 @@ from __future__ import division, print_function
 import numba
 import numpy as np
 #import matplotlib.pyplot as plt
+from os import path
 
 from mark import TristanRun
 from trochograph import Fields, Particles, run_trochograph, tprint
@@ -167,4 +168,5 @@ def user_prtl_bc(px, py, pz, dimf):
 
 
 if __name__ == '__main__':
+    print("Trochograph started from:", path.basename(__file__))
     run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc)

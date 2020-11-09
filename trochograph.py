@@ -36,11 +36,6 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     dimf = flds.ex.shape  # dimf always means fld shape WITHOUT ghost cells
     p = user_prtl(dimf)
 
-    last        = par['last']
-    lapst       = par['lapst']
-    c           = par['c']
-    qm          = par['qm']
-
     for arr in [p.x, p.y, p.z, p.u, p.v, p.w]:
         assert arr.ndim  == 1
         assert arr.dtype.kind == 'f'
@@ -48,10 +43,12 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
         assert arr.ndim  == 3
         assert arr.dtype.kind == 'f'
 
-    tprint("  lapst =",lapst, "last =",last)
-    tprint("  flds shape =", flds.ex.shape)
+    tprint("  flds shape =", dimf)
     tprint("  prtl number =", p.x.size)
-    tprint("  qm =", par['qm'])
+    tprint("  prtl x,y,z,u,v,w dtype =", p.x.dtype, p.y.dtype, p.z.dtype, p.u.dtype, p.v.dtype, p.w.dtype)
+    tprint("Input parameters:", p.x.size)
+    for kk in sorted(par):
+        tprint("  {:s} = {}".format(kk, par[kk]))
 
     # -----------------------------------------
     # Apply ghost cells, enforce array memory layout, enforce particle BCs
@@ -104,7 +101,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     if not os.path.exists("output"):
         os.mkdir("output")
     #os.makedirs("output", exist_ok=True)  # needs python >=3.2
-    output(p,par,lapst)
+    output(p,par,par['lapst'])
 
     # -----------------------------------------
     # main loop
@@ -116,7 +113,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tlaprestout = 0
     tlapfirst = 0
 
-    for lap in range(lapst+1, last+1):
+    for lap in range(par['lapst']+1, par['last']+1):
 
         tlap0 = datetime.now()
         tprint("Lap {:10d}".format(lap),end='')
@@ -126,7 +123,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
             p.x,p.y,p.z,p.u,p.v,p.w,
             p.wtot,p.wprl,p.wx,p.wy,p.wz,
             p.ex,p.ey,p.ez,p.bx,p.by,p.bz,
-            qm,c
+            par['qm'],par['c']
         )
 
         tlap1 = datetime.now()
@@ -161,7 +158,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
             tprint("  wrote", fwrote)
 
         tlaptot += dtlap3_0
-        if lap == lapst+1:
+        if lap == par['lapst']+1:
             tlapfirst = dtlap3_0
         else:
             tlaprestmov += dtlap1_0
@@ -592,7 +589,6 @@ def output(p,par,lap):
     """Write outputs"""
 
     interval    = par['interval']
-    last        = par['last']
     pltstart    = par['pltstart']
 
     if lap % interval != 0:
