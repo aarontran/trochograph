@@ -24,11 +24,11 @@ Dependencies: h5py, numba
 
 Usage: trace particles in a 1-D-like B-field tanh ramp
 
-    python user_bzramp.py
+    python user_bramp.py
 
 Usage: same, but manually set thread count.  See numba docs for details.
 
-    NUMBA_NUM_THREADS={xx} python user_bzramp.py
+    NUMBA_NUM_THREADS={xx} python user_bramp.py
 
 Usage: trace particles on TRISTAN output flds.  Does not work out of the box
 due to dependency on a homebrewed Python layer for reading TRISTAN outputs, so
