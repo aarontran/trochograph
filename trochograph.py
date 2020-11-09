@@ -33,7 +33,8 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
     par = user_input()
     flds = user_flds(par)
-    p = user_prtl(par)
+    dimf = flds.ex.shape  # dimf always means fld shape WITHOUT ghost cells
+    p = user_prtl(dimf)
 
     last        = par['last']
     lapst       = par['lapst']
@@ -52,15 +53,33 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("  prtl number =", p.x.size)
     tprint("  qm =", par['qm'])
 
+    # -----------------------------------------
+    # Apply ghost cells, enforce array memory layout, enforce particle BCs
+
+    flds.ex = add_ghost(flds.ex, par)
+    flds.ey = add_ghost(flds.ey, par)
+    flds.ez = add_ghost(flds.ez, par)
+    flds.bx = add_ghost(flds.bx, par)
+    flds.by = add_ghost(flds.by, par)
+    flds.bz = add_ghost(flds.bz, par)
+
+    # row- vs column-order seems to affect performance at ~10% level
+    # (~3e-4 vs 3.5e-4, for 1000 prtl on dimf=(100+1,10+1,1+1))
+    flds.ex = np.ascontiguousarray(flds.ex)
+    flds.ey = np.ascontiguousarray(flds.ey)
+    flds.ez = np.ascontiguousarray(flds.ez)
+    flds.bx = np.ascontiguousarray(flds.bx)
+    flds.by = np.ascontiguousarray(flds.by)
+    flds.bz = np.ascontiguousarray(flds.bz)
+
     tprint("Pre-enforce prtl BCs")
-    if par['userbc']:
-        user_prtl_bc(p.x,p.y,p.z,flds.ex.shape)
-    else:
-        prtl_bc(
-            p.x,p.y,p.z,
-            flds.ex.shape,
-            par['periodicx'],par['periodicy'],par['periodicz']
-        )
+
+    prtl_bc(
+        p.x,p.y,p.z,dimf,
+        par['periodicx'],par['periodicy'],par['periodicz']
+    )
+
+    user_prtl_bc(p.x,p.y,p.z,dimf)
 
     tprint("Get prtl starting flds for initial output")
     # E-component interpolations:
@@ -104,14 +123,12 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
         tlap1 = datetime.now()
 
-        if par['userbc']:
-            user_prtl_bc(p.x,p.y,p.z,flds.ex.shape)
-        else:
-            prtl_bc(
-                p.x,p.y,p.z,
-                flds.ex.shape,
-                par['periodicx'],par['periodicy'],par['periodicz']
-            )
+        prtl_bc(
+            p.x,p.y,p.z,dimf,
+            par['periodicx'],par['periodicy'],par['periodicz']
+        )
+
+        user_prtl_bc(p.x,p.y,p.z,dimf)
 
         tlap2 = datetime.now()
 
@@ -502,16 +519,37 @@ def interp(fld,x,y,z):
     return fout
 
 
+def add_ghost(fld, par):
+    """
+    Attach ghost cells to far edges of fld for periodic boundaries
+    Returns copy of fld; input array is not modified
+    """
+    if par['periodicx']:
+        #fld = np.concatenate((fld[-1:,:,:], fld, fld[0:1,:,:]), axis=0)
+        fld = np.concatenate((fld, fld[0:1,:,:]), axis=0)
+    if par['periodicy']:
+        #fld = np.concatenate(( fld[:,-1:,:],  fld,  fld[:,0:1,:]), axis=1)
+        fld = np.concatenate((fld, fld[:,0:1,:]), axis=1)
+    if par['periodicz']:
+        #fld = np.concatenate((fld[:,:,-1:], fld, fld[:,:,0:1]), axis=2)
+        fld = np.concatenate((fld, fld[:,:,0:1]), axis=2)
+    return fld
+
+
+
 @numba.njit(cache=True,parallel=True)
 def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
-    """Given p, dimf; update p according to desired BCs for dimf"""
+    """Given p, dimf; update p according to desired BCs for dimf
+    dimf = fld shape provided by user, NOT including ghost cells
+        for periodic bdry
+    """
     for ip in numba.prange(px.size):
 
         # x boundary condition
         if periodicx:
-            #px[ip] = np.mod(px[ip], dimf[0]-1)  # modulo func is slow
-            if px[ip] > (dimf[0]-1):
-                px[ip] = px[ip] - (dimf[0]-1)
+            #px[ip] = np.mod(px[ip], dimf[0])  # modulo func is slow
+            if px[ip] > dimf[0]:
+                px[ip] = px[ip] - dimf[0]
         else:
             #assert px[ip] >= 0             # asserts prevent numba parallelism
             #assert px[ip] <= dimf[0] - 1
@@ -520,9 +558,9 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
 
         # y boundary condition
         if periodicy:
-            #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
-            if py[ip] > (dimf[1]-1):
-                py[ip] = py[ip] - (dimf[1]-1)
+            #py[ip] = np.mod(py[ip], dimf[1])  # modulo func is slow
+            if py[ip] > dimf[1]:
+                py[ip] = py[ip] - dimf[1]
         else:
             #assert py[ip] >= 0             # asserts prevent numba parallelism
             #assert py[ip] <= dimf[1] - 1
@@ -531,9 +569,9 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
 
         # z boundary condition
         if periodicz:
-            #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
-            if pz[ip] > (dimf[2]-1):
-                pz[ip] = pz[ip] - (dimf[2]-1)
+            #pz[ip] = np.mod(pz[ip], dimf[2])  # modulo func is slow
+            if pz[ip] > dimf[2]:
+                pz[ip] = pz[ip] - dimf[2]
         else:
             #assert pz[ip] >= 0             # asserts prevent numba parallelism
             #assert pz[ip] <= dimf[2] - 1

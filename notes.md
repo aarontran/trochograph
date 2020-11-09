@@ -281,3 +281,32 @@ Four threads, user- vs param-specified BC
               rest output 0.56961799999994
 
 Cost aint big. BC does not benefit much from parallelizing, should we turn off?
+
+Can we put ghost cell handling under the hood, so user needn't deal with?
+Not completely.  User has to reckon with ghost cells during prtl init, and if
+they are applying user-specified BCs.
+
+Strategy:
+* `user_flds(...)` initializes flds without ghost cells
+
+* `user_prtl(...)` can put prtl on ghost cells; the user is responsible for
+  knowing how the prtl domain changes depending on BCs
+
+* the variable "dimf" always means flds shape without ghost cells; i.e., what
+  the user originally put in (and not the flds shape used internally)
+
+* code-applied BCs remain in effect, even if user supplies custom BCs
+  + code BCs always get applied before user BCs, since code BCs help to
+    strictly define the valid prtl domain
+
+Not-used strategies:
+* user is responsible for supplying ghost cells + BCs, code doesn't handle
+  + pro: user knows how things work; nothing hidden
+  + con: more copy-paste code, more hard-coded numbers floating around
+
+* let `user_prtl(...)` take arguments "xlim,ylim,zlim" representing the valid
+  particle domain; user is not told whether xlim,ylim,zlim = dimf or not.
+  + pro: right meaning
+  + con: extra layer of abstraction = conceptual overhead.
+    user may bypass "xlim,ylim,zlim" abstraction layer anyways
+    should they choose to specify custom BCs

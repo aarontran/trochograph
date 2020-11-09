@@ -41,7 +41,6 @@ def user_input():
     par['interval'] = 20
 
     # <boundaries>
-    par['userbc'] = False  # apply user_prtl_bc(...), overriding periodic{x,y,z}?
     par['periodicx'] = False # True=periodic, False="outflow" (escaping particles get NaN-ed)
     par['periodicy'] = True  # True=periodic, False="outflow" (escaping particles get NaN-ed)
     par['periodicz'] = True  # True=periodic, False="outflow" (escaping particles get NaN-ed)
@@ -99,7 +98,7 @@ def user_flds(par):
       y in [0, fld.shape[1]-1)
       z in [0, fld.shape[2]-1)
     """
-    dimf = (200, 10, 1)  # final dimf will have +1 to everything to make grid cells volume filling...
+    dimf = (200, 10, 1)
 
     # numpy default should be C ordering already, but force just to be safe
     # row- vs column-order seems to affect numba+interp performance at ~10% level  (~3e-4 vs 3.5e-4, for 1000 prtl on dimf=(100+1,10+1,1+1))
@@ -123,29 +122,16 @@ def user_flds(par):
     #plt.plot(xx,np.mean(flds.bz,axis=(-2,-1)))
     #plt.show()
 
-    # tack periodic edges onto cross-shock y- and z-dimension, ONLY at "far" edges
-    # WARNING this assumes a certain set of user prtl BCs...
-    def add_ghost(fld):
-        #fldp = np.concatenate(( fld[:,-1:,:],  fld,  fld[:,0:1,:]), axis=1)
-        #fldp = np.concatenate((fldp[:,:,-1:], fldp, fldp[:,:,0:1]), axis=2)
-        ##fldp = np.concatenate((fldp[-1:,:,:], fldp, fldp[0:1,:,:]), axis=0)
-        fldp = np.concatenate(( fld,  fld[:,0:1,:]), axis=1)
-        fldp = np.concatenate((fldp, fldp[:,:,0:1]), axis=2)
-        #fldp = np.concatenate((fldp, fldp[0:1,:,:]), axis=0)
-        return fldp
-
-    flds.ex = add_ghost(flds.ex)
-    flds.ey = add_ghost(flds.ey)
-    flds.ez = add_ghost(flds.ez)
-    flds.bx = add_ghost(flds.bx)
-    flds.by = add_ghost(flds.by)
-    flds.bz = add_ghost(flds.bz)
-
     return flds
 
 
-def user_prtl(par):
-    """Return p.{x,y,z,u,v,w} to initialize prtl"""
+def user_prtl(dimf):
+    """
+    Return p.{x,y,z,u,v,w} to initialize prtl
+    dimf = fields shape as provided by user, /without/ ghost cells
+        user is responsible for initializing prtls in correct region,
+        accounting for presence or absence of ghost cells.
+    """
     # in cell coordinates
     p = Particles()
 
@@ -155,8 +141,8 @@ def user_prtl(par):
     nprtl = 1000
 
     p.x = np.random.uniform(190, 191, size=nprtl)
-    p.y = np.random.uniform(  0,  10, size=nprtl)
-    p.z = np.random.uniform(  0,   1, size=nprtl)
+    p.y = np.random.uniform(  0, dimf[1], size=nprtl)
+    p.z = np.random.uniform(  0, dimf[2], size=nprtl)
     p.u = -0.01 + np.random.normal(0, scale=0.05/3**0.5, size=nprtl)
     p.v =         np.random.normal(0, scale=0.05/3**0.5, size=nprtl)
     p.w =         np.random.normal(0, scale=0.05/3**0.5, size=nprtl)
@@ -182,21 +168,23 @@ def user_prtl(par):
 
 @numba.njit(cache=True,parallel=True)
 def user_prtl_bc(px, py, pz, dimf):
-    """Given p, dimf; update p according to desired BCs for dimf"""
-    for ip in numba.prange(px.size):
-        # x boundary condition - enforce no prtl exit domain
-        #assert px[ip] >= 0             # asserts prevent numba parallelism
-        #assert px[ip] <= dimf[0] - 1
-        if px[ip] < 0 or px[ip] > dimf[0]-1:
-            px[ip] = np.nan
-        # y periodic boundary condition
-        #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
-        if py[ip] > (dimf[1]-1):
-            py[ip] = py[ip] - (dimf[1]-1)
-        # z periodic boundary condition
-        #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
-        if pz[ip] > (dimf[2]-1):
-            pz[ip] = pz[ip] - (dimf[2]-1)
+    """Given prtl position arrays px,py,pz and user-input fld size dimf;
+    modify px,py,pz to implement user's desired BCs.
+    """
+    #for ip in numba.prange(px.size):
+    #    # x boundary condition - enforce no prtl exit domain
+    #    #assert px[ip] >= 0             # asserts prevent numba parallelism
+    #    #assert px[ip] <= dimf[0] - 1
+    #    if px[ip] < 0 or px[ip] > dimf[0]-1:
+    #        px[ip] = np.nan
+    #    # y periodic boundary condition, with ghost cell
+    #    #py[ip] = np.mod(py[ip], dimf[1])  # modulo func is slow
+    #    if py[ip] > dimf[1]:
+    #        py[ip] = py[ip] - dimf[1]
+    #    # z periodic boundary condition, with ghost cell
+    #    #pz[ip] = np.mod(pz[ip], dimf[2])  # modulo func is slow
+    #    if pz[ip] > dimf[2]:
+    #        pz[ip] = pz[ip] - dimf[2]
     return
 
 
