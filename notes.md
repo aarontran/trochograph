@@ -120,3 +120,108 @@ Example: for {user input mx0,my0} = 4,1, the internal (i,j) grid looks like:
 
 Internal coordinates run from i=1 to i=mx=9, j=1 to j=my=5.
 Particles live within (i,j)=(3,3) to (4,7).
+
+
+Making things go fastly
+=======================
+
+For comparison/inspiration: https://github.com/mikegrudic/pykdgrav
+
+Profiling: `python -m line_profiler asdf.py.lprof`.
+
+2020 Jul 17-31 (ish)
+--------------------
+Things tried for interpolation:
+1. `scipy.interpolate.interpn(...)`, called every loop
+2. `scipy.interpolate.RegularGridInterpolator`, pre-cached function
+3. `interp_3d.Interp3D(...)` (from https://github.com/jglaser/interp3d),
+   pre-cached function
+4. Buneman's interp, array broadcasting
+5. Buneman's interp, loop over individual prtl
+
+Things tried for output:
+* numpy `savez` is really big
+* numpy `savez_compressed`
+* hdf5 gzip doesn't help much
+
+
+2020 Nov 06-07
+--------------
+
+### Mover speedup
+Mover: do explicit prtl loop with numba prange rather than array broadcast,
+basically the same as what TRISTAN does.  Test on "bzramp" problem with 10,000
+particles, 200 laps:
+
+    array mover     = 0.40 sec / (10000 prtl x 199 lap) = 2e-7 sec/prtl-lap
+    loop mover,     = 0.20 sec / (10000 prtl x 199 lap) = 1e-7 sec/prtl-lap
+    loop mover,prll = 0.12 sec / (10000 prtl x 199 lap) = 6e-8 sec/prtl-lap
+
+numba fastmath = ~10% speedup in mover.
+
+Redo "bzramp" with fastmath, TBB loaded, slurm allocated 20 procs, and 100,000
+particles to check threading performance:
+
+     1 thread, 2.02  sec                       = 1.0e-7 thread-sec/prtl-lap
+     5 thread, 0.737 sec = 3.7e-8 sec/prtl-lap = 1.9e-7 thread-sec/prtl-lap
+    10 thread, 0.444 sec = 2.2e-8 sec/prtl-lap = 2.2e-7 thread-sec/prtl-lap
+    20 thread, 0.288 sec = 1.4e-8 sec/prtl-lap = 2.8e-7 thread-sec/prtl-lap
+
+Compare to TRISTAN run on same hardware (habanero cluster) with AVX2.
+My run `mi400Ms4b0.25theta65_2d_my552_comp20_later` with 8.03e8 prtl and 552
+CPU takes 0.1 sec to move.  Cost is thus 0.1/(8.03e8/552) = 7e-8 cpu-sec per
+prtl-lap.  So trochograph is just a bit slower than Fortran, but for some
+reason doesn't scale ideally on threads.
+
+### Prtl BC speedup
+Prtl boundary condition: njit on prtl boundary condition is ~10% speedup for BC
+time, but ~1% of total time, so small gain.  Also maybe affected by timing
+noise.  Replacing costly modulo function with if/else check helps the most.
+
+    baseline: 0.073 sec
+    baseline, no x check: 0.067 sec
+    numba njit parallel: 0.050 sec, 0.053 sec
+    numba njit parallel, no x check: 0.041 sec
+    numba njit parallel, yes x check, NO modulo: 0.012 sec
+
+### Output speedup
+HDF5 performance? moving to libver='latest' improves performance by about 25%.
+
+### Threading
+Try `module load intel-tbb-oss/intel64/2017_20161128oss`
+Result: looks the same... maybe TBB loaded by parallel studio already?
+Or other threading options work well enough?  Or I didn't configure right.
+
+### Overall gain
+Run on shock flds is ~10x faster than version from July.
+
+* Old run from July 2020
+
+    Lap     759997  move 6.986e-03 out 7.000e-06 tot 6.993e-03
+    Lap     759998  move 6.958e-03 out 7.000e-06 tot 6.965e-03
+    Lap     759999  move 6.992e-03 out 6.000e-06 tot 6.998e-03
+    Lap     760000  move 7.197e-03 out 1.364e-02 tot 2.083e-02
+      wrote output/troch.1000
+    Done, total time: 2540.935682
+      init time 8.722618
+      loop time 2532.213064
+        first lap 8.786596
+        rest laps 2513.037071000067
+          rest mover 2493.6883080001135
+          rest output 19.3487630000371
+
+* Run 24 threads (forgot how many cores given by slurm)
+
+    Lap     759997  move 5.100e-04 bc 8.400e-05 out 2.000e-06 tot 5.960e-04
+    Lap     759998  move 4.770e-04 bc 8.300e-05 out 2.000e-06 tot 5.620e-04
+    Lap     759999  move 4.920e-04 bc 8.100e-05 out 2.000e-06 tot 5.750e-04
+    Lap     760000  move 5.290e-04 bc 8.100e-05 out 1.295e-02 tot 1.356e-02
+      wrote output/troch.1000
+    Done, total time: 343.257236
+      init time 10.645249
+      loop time 332.611987
+        first lap 4.826299
+        rest laps 299.09611899999004
+          rest mover 239.98665600002798
+          rest bc 37.09661899999347
+          rest output 22.012843999882318
