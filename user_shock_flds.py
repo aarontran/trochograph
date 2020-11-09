@@ -23,10 +23,9 @@ import numpy as np
 from mark import TristanRun
 from trochograph import Fields, Particles, run_trochograph, tprint
 
-# global prtl arrays: struct w/ p.{x,y,z,u,v,w,ind,proc} (all dprec)
-#   for prtl tracking: p.{ev,evprl,evx,evy,evz}
-# global fld arays: flds.{ex,ey,ez,bx,by,bz}
-# global scalar constants: par.{c, qm}
+# global prtl arrays: struct w/ p.{x,y,z,u,v,w,ind,proc}
+# global fld arrays: flds.{ex,ey,ez,bx,by,bz}
+# global scalar constants: par.{c,qm}
 
 # user must provide parameters:  c, interval, lapst, last, pltstart, qm
 # and also fields and prtls, of course
@@ -139,19 +138,6 @@ def user_prtl(dimf):
 
     p.proc = tprtl['proce'][sel]
     p.ind  = tprtl['inde'][sel]
-
-    p.wtot = np.zeros_like(p.x)
-    p.wprl = np.zeros_like(p.x)
-    p.wx   = np.zeros_like(p.x)
-    p.wy   = np.zeros_like(p.x)
-    p.wz   = np.zeros_like(p.x)
-
-    p.ex   = np.zeros_like(p.x)
-    p.ey   = np.zeros_like(p.x)
-    p.ez   = np.zeros_like(p.x)
-    p.bx   = np.zeros_like(p.x)
-    p.by   = np.zeros_like(p.x)
-    p.bz   = np.zeros_like(p.x)
 
     return p
 

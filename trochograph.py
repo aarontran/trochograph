@@ -81,7 +81,10 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
     user_prtl_bc(p.x,p.y,p.z,dimf)
 
-    tprint("Get prtl starting flds for initial output")
+    # -----------------------------------------
+    # Initial output
+
+    tprint("Get prtl tracking flds for initial output")
     # E-component interpolations:
     p.ex = interp(flds.ex,p.x,p.y,p.z)
     p.ey = interp(flds.ey,p.x,p.y,p.z)
@@ -90,7 +93,12 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     p.bx = interp(flds.bx,p.x,p.y,p.z)
     p.by = interp(flds.by,p.x,p.y,p.z)
     p.bz = interp(flds.bz,p.x,p.y,p.z)
-
+    # E dot v work tracking
+    p.wtot = np.zeros_like(p.x)
+    p.wprl = np.zeros_like(p.x)
+    p.wx   = np.zeros_like(p.x)
+    p.wy   = np.zeros_like(p.x)
+    p.wz   = np.zeros_like(p.x)
 
     tprint("Initial output")
     if not os.path.exists("output"):
