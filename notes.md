@@ -225,3 +225,59 @@ Run on shock flds is ~10x faster than version from July.
           rest mover 239.98665600002798
           rest bc 37.09661899999347
           rest output 22.012843999882318
+
+
+2020 Nov 07-08
+--------------
+Change from user-specified BC to param-specified, but implement on code side?
+Small-ish wallclock cost, but should be much more user-friendly this way.
+
+One thread, user- vs param-specified BC
+
+    user-provided function
+
+        Done, total time: 31.870584
+          init time 3.861863
+          loop time 28.008721
+            first lap 4.651909
+            rest laps 23.260312000000166
+              rest mover 21.887041000000018
+              rest bc 0.5587780000000313
+              rest output 0.8144929999999242
+
+    param-specified
+
+        Done, total time: 38.073931
+          init time 10.022054
+          loop time 28.051877
+            first lap 4.536094
+            rest laps 23.421835000000073
+              rest mover 21.860247999999956
+              rest bc 0.7777529999999826
+              rest output 0.7838339999999334
+
+Four threads, user- vs param-specified BC
+
+    user-provided function
+
+        Done, total time: 33.345343
+          init time 16.365275
+          loop time 16.980068
+            first lap 4.658985
+            rest laps 12.201204000000033
+              rest mover 11.07100400000007
+              rest bc 0.5605820000000101
+              rest output 0.56961799999994
+
+    param-specified
+
+        Done, total time: 33.345343
+          init time 16.365275
+          loop time 16.980068
+            first lap 4.658985
+            rest laps 12.201204000000033
+              rest mover 11.07100400000007
+              rest bc 0.5605820000000101
+              rest output 0.56961799999994
+
+Cost aint big. BC does not benefit much from parallelizing, should we turn off?

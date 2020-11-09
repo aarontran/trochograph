@@ -40,6 +40,12 @@ def user_input():
     par['last']     = 20000
     par['interval'] = 20
 
+    # <boundaries>
+    par['userbc'] = False  # apply user_prtl_bc(...), overriding periodic{x,y,z}?
+    par['periodicx'] = False # True=periodic, False="outflow" (escaping particles get NaN-ed)
+    par['periodicy'] = True  # True=periodic, False="outflow" (escaping particles get NaN-ed)
+    par['periodicz'] = True  # True=periodic, False="outflow" (escaping particles get NaN-ed)
+
     # NOTE important requirement: istep=1 is ASSUMED for tracing
 
     # get from param file
@@ -174,7 +180,7 @@ def user_prtl(par):
     return p
 
 
-@numba.njit(parallel=True)
+@numba.njit(cache=True,parallel=True)
 def user_prtl_bc(px, py, pz, dimf):
     """Given p, dimf; update p according to desired BCs for dimf"""
     for ip in numba.prange(px.size):

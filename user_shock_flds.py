@@ -52,6 +52,12 @@ def user_input():
                                            # actually, NEED MUCH MORE cuz shock is not moving forward... so progress is slow
     par['interval'] = 400
 
+    # <boundaries>
+    par['userbc'] = False  # apply user_prtl_bc(...), overriding periodic{x,y,z}?
+    par['periodicx'] = False # True=periodic, False="outflow" (escaping particles get NaN-ed)
+    par['periodicy'] = True  # True=periodic, False="outflow" (escaping particles get NaN-ed)
+    par['periodicz'] = True  # True=periodic, False="outflow" (escaping particles get NaN-ed)
+
     # get from param file
     par['c']        = SCENE.param['c']  # speed of light
     par['lapst']    = SCENE.lap()  # lap we (re-)start from
@@ -169,7 +175,7 @@ def user_prtl(par):
     return p
 
 
-@numba.njit(parallel=True)
+@numba.njit(cache=True,parallel=True)
 def user_prtl_bc(px, py, pz, dimf):
     """Given p, dimf; update p according to desired BCs for dimf"""
     for ip in numba.prange(px.size):

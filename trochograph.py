@@ -53,7 +53,14 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("  qm =", par['qm'])
 
     tprint("Pre-enforce prtl BCs")
-    user_prtl_bc(p.x,p.y,p.z,flds.ex.shape)
+    if par['userbc']:
+        user_prtl_bc(p.x,p.y,p.z,flds.ex.shape)
+    else:
+        prtl_bc(
+            p.x,p.y,p.z,
+            flds.ex.shape,
+            par['periodicx'],par['periodicy'],par['periodicz']
+        )
 
     tprint("Get prtl starting flds for initial output")
     # E-component interpolations:
@@ -97,7 +104,14 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
         tlap1 = datetime.now()
 
-        user_prtl_bc(p.x,p.y,p.z,flds.ex.shape)
+        if par['userbc']:
+            user_prtl_bc(p.x,p.y,p.z,flds.ex.shape)
+        else:
+            prtl_bc(
+                p.x,p.y,p.z,
+                flds.ex.shape,
+                par['periodicx'],par['periodicy'],par['periodicz']
+            )
 
         tlap2 = datetime.now()
 
@@ -486,6 +500,46 @@ def interp(fld,x,y,z):
         #print("interp: fout=", fout[ip])
 
     return fout
+
+
+@numba.njit(cache=True,parallel=True)
+def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
+    """Given p, dimf; update p according to desired BCs for dimf"""
+    for ip in numba.prange(px.size):
+
+        # x boundary condition
+        if periodicx:
+            #px[ip] = np.mod(px[ip], dimf[0]-1)  # modulo func is slow
+            if px[ip] > (dimf[0]-1):
+                px[ip] = px[ip] - (dimf[0]-1)
+        else:
+            #assert px[ip] >= 0             # asserts prevent numba parallelism
+            #assert px[ip] <= dimf[0] - 1
+            if px[ip] < 0 or px[ip] > dimf[0]-1:
+                px[ip] = np.nan
+
+        # y boundary condition
+        if periodicy:
+            #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
+            if py[ip] > (dimf[1]-1):
+                py[ip] = py[ip] - (dimf[1]-1)
+        else:
+            #assert py[ip] >= 0             # asserts prevent numba parallelism
+            #assert py[ip] <= dimf[1] - 1
+            if py[ip] < 0 or py[ip] > dimf[1]-1:
+                py[ip] = np.nan
+
+        # z boundary condition
+        if periodicz:
+            #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
+            if pz[ip] > (dimf[2]-1):
+                pz[ip] = pz[ip] - (dimf[2]-1)
+        else:
+            #assert pz[ip] >= 0             # asserts prevent numba parallelism
+            #assert pz[ip] <= dimf[2] - 1
+            if pz[ip] < 0 or pz[ip] > dimf[2]-1:
+                pz[ip] = np.nan
+    return
 
 
 def output(p,par,lap):
