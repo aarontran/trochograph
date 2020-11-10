@@ -34,7 +34,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     par = user_input()
     flds = user_flds(par)
     dimf = flds.ex.shape  # dimf always means fld shape WITHOUT ghost cells
-    p = user_prtl(dimf)
+    p = user_prtl(flds)
 
     for arr in [p.x, p.y, p.z, p.u, p.v, p.w]:
         assert arr.ndim  == 1
@@ -44,11 +44,25 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
         assert arr.dtype.kind == 'f'
 
     tprint("  flds shape =", dimf)
+    tprint("  flds ex,ey,ez,bx,by,bz dtype =",
+            flds.ex.dtype, flds.ey.dtype, flds.ez.dtype,
+            flds.bx.dtype, flds.by.dtype, flds.bz.dtype,
+    )
     tprint("  prtl number =", p.x.size)
-    tprint("  prtl x,y,z,u,v,w dtype =", p.x.dtype, p.y.dtype, p.z.dtype, p.u.dtype, p.v.dtype, p.w.dtype)
+    tprint("  prtl x,y,z,u,v,w dtype =",
+            p.x.dtype, p.y.dtype, p.z.dtype,
+            p.u.dtype, p.v.dtype, p.w.dtype
+    )
     tprint("Input parameters:", p.x.size)
     for kk in sorted(par):
         tprint("  {:s} = {}".format(kk, par[kk]))
+
+    tprint("Numba threading")
+    tprint("  NUM_THREADS", numba.config.NUMBA_NUM_THREADS)
+    tprint("  DEFAULT_NUM_THREADS", numba.config.NUMBA_DEFAULT_NUM_THREADS)
+    tprint("  get_num_threads()", numba.get_num_threads())
+    tprint("  THREADING_LAYER", numba.config.THREADING_LAYER)
+    tprint("  threading_layer()", numba.threading_layer())
 
     # -----------------------------------------
     # Apply ghost cells, enforce array memory layout, enforce particle BCs
@@ -178,13 +192,6 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("      rest mover", tlaprestmov)
     tprint("      rest bc", tlaprestbc)
     tprint("      rest output", tlaprestout)
-
-    tprint("Numba threading")
-    tprint("  NUM_THREADS", numba.config.NUMBA_NUM_THREADS)
-    tprint("  DEFAULT_NUM_THREADS", numba.config.NUMBA_DEFAULT_NUM_THREADS)
-    tprint("  get_num_threads()", numba.get_num_threads())
-    tprint("  THREADING_LAYER", numba.config.THREADING_LAYER)
-    tprint("  threading_layer()", numba.threading_layer())
 
     #interp.parallel_diagnostics(level=4)
     #mover.parallel_diagnostics(level=4)

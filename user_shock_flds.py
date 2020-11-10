@@ -111,7 +111,7 @@ def user_flds(par):
     return flds
 
 
-def user_prtl(dimf):
+def user_prtl(flds):
     """Return p.{x,y,z,u,v,w} to initialize prtl"""
 
     tprtl = SCENE.prtl('xe','ye','ze','ue','ve','we','proce','inde')

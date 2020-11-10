@@ -122,7 +122,7 @@ def user_flds(par):
     return flds
 
 
-def user_prtl(dimf):
+def user_prtl(flds):
     """
     Return p.{x,y,z,u,v,w} to initialize prtl
     dimf = fields shape as provided by user, /without/ ghost cells
@@ -136,6 +136,7 @@ def user_prtl(dimf):
     # if ints, results will be bad
 
     nprtl = 1000
+    dimf = flds.ex.shape
 
     p.x = np.random.uniform(190, 191, size=nprtl)
     p.y = np.random.uniform(  0, dimf[1], size=nprtl)
