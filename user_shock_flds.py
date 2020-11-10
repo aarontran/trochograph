@@ -159,11 +159,15 @@ def user_prtl_bc(px, py, pz, dimf):
     #    # y periodic boundary condition, with ghost cell
     #    #py[ip] = np.mod(py[ip], dimf[1])  # modulo func is slow
     #    if py[ip] > dimf[1]:
-    #        py[ip] = py[ip] - dimf[1]
+    #        py[ip] -= dimf[1]
+    #    elif py[ip] < 0:
+    #        py[ip] += dimf[1]
     #    # z periodic boundary condition, with ghost cell
     #    #pz[ip] = np.mod(pz[ip], dimf[2])  # modulo func is slow
     #    if pz[ip] > dimf[2]:
-    #        pz[ip] = pz[ip] - dimf[2]
+    #        pz[ip] -= dimf[2]
+    #    elif pz[ip] < 0:
+    #        pz[ip] += dimf[2]
     return
 
 

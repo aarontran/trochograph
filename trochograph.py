@@ -554,7 +554,9 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
         if periodicx:
             #px[ip] = np.mod(px[ip], dimf[0])  # modulo func is slow
             if px[ip] > dimf[0]:
-                px[ip] = px[ip] - dimf[0]
+                px[ip] -= dimf[0]
+            elif px[ip] < 0:
+                px[ip] += dimf[0]
         else:
             #assert px[ip] >= 0             # asserts prevent numba parallelism
             #assert px[ip] <= dimf[0] - 1
@@ -565,7 +567,9 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
         if periodicy:
             #py[ip] = np.mod(py[ip], dimf[1])  # modulo func is slow
             if py[ip] > dimf[1]:
-                py[ip] = py[ip] - dimf[1]
+                py[ip] -= dimf[1]
+            elif py[ip] < 0:
+                py[ip] += dimf[1]
         else:
             #assert py[ip] >= 0             # asserts prevent numba parallelism
             #assert py[ip] <= dimf[1] - 1
@@ -576,7 +580,9 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
         if periodicz:
             #pz[ip] = np.mod(pz[ip], dimf[2])  # modulo func is slow
             if pz[ip] > dimf[2]:
-                pz[ip] = pz[ip] - dimf[2]
+                pz[ip] -= dimf[2]
+            elif pz[ip] < 0:
+                pz[ip] += dimf[2]
         else:
             #assert pz[ip] >= 0             # asserts prevent numba parallelism
             #assert pz[ip] <= dimf[2] - 1
