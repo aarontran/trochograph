@@ -96,7 +96,12 @@ def user_flds(par):
       y in [0, fld.shape[1]-1)
       z in [0, fld.shape[2]-1)
     """
-    dimf = (200, 10, 1)
+    dimf = (200, 1, 10)  # for interval=20, lecs travel at most 9 cells in one step, so 10 cells allows to reconstruct x,z traj
+    btheta = 65*np.pi/180  # angle between B and shock normal in radians
+    rRH = 2  # density jump
+    # ramp at x=100+/-30 cell
+    xx = np.arange(dimf[0])
+    ramp_profile = (1 + (rRH-1)*0.5*(np.tanh((100-xx)/30)+1))  # 1D array
 
     # numpy default should be C ordering already, but force just to be safe
     # row- vs column-order seems to affect numba+interp performance at ~10% level  (~3e-4 vs 3.5e-4, for 1000 prtl on dimf=(100+1,10+1,1+1))
@@ -105,19 +110,13 @@ def user_flds(par):
 
     flds = Fields()
     flds.ex = zeros
-    flds.ey = -0.01 * par['Binit'] * ones  # constant, so force "shock" frame
-    flds.ez = zeros
-    flds.bx = zeros
-    flds.by = zeros
-    #flds.bz = par['Binit'] * ones
+    flds.ey = zeros
+    flds.ez = +0.01 * par['Binit']*np.sin(btheta) * ones  # constant, so force "shock" frame
+    flds.bx = par['Binit']*np.cos(btheta) * ones
+    flds.by = par['Binit']*np.sin(btheta) * ramp_profile[:,np.newaxis,np.newaxis] * ones
+    flds.bz = zeros
 
-    # ramp at x=100+/-30 cell
-    rRH = 2  # density jump
-    xx = np.arange(dimf[0])
-    bprofile = par['Binit'] * (1 + (rRH-1)*0.5*(np.tanh((100-xx)/30)+1))
-    flds.bz = bprofile[:,np.newaxis,np.newaxis] * ones
-
-    #plt.plot(xx,np.mean(flds.bz,axis=(-2,-1)))
+    #plt.plot(xx,np.mean(flds.by,axis=(-2,-1)))
     #plt.show()
 
     return flds
