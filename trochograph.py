@@ -32,9 +32,33 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("Initializing input, flds, prtl")
 
     par = user_input()
+
     flds = user_flds(par)
-    dimf = flds.ex.shape  # dimf always means fld shape WITHOUT ghost cells
+
+    dimf0 = flds.ex.shape  # dimf0 means fld shape WITHOUT ghost cells
+
+    flds.ex = add_ghost(flds.ex, par)
+    flds.ey = add_ghost(flds.ey, par)
+    flds.ez = add_ghost(flds.ez, par)
+    flds.bx = add_ghost(flds.bx, par)
+    flds.by = add_ghost(flds.by, par)
+    flds.bz = add_ghost(flds.bz, par)
+
+    dimf = flds.ex.shape  # dimf means fld shape WITH ghost cells
+
+    # row- vs column-order seems to affect performance at ~10% level
+    # (~3e-4 vs 3.5e-4, for 1000 prtl on dimf=(100+1,10+1,1+1))
+    flds.ex = np.ascontiguousarray(flds.ex)
+    flds.ey = np.ascontiguousarray(flds.ey)
+    flds.ez = np.ascontiguousarray(flds.ez)
+    flds.bx = np.ascontiguousarray(flds.bx)
+    flds.by = np.ascontiguousarray(flds.by)
+    flds.bz = np.ascontiguousarray(flds.bz)
+
     p = user_prtl(flds)
+
+    # -----------------------------------------
+    # some checks, report to stdout
 
     for arr in [p.x, p.y, p.z, p.u, p.v, p.w]:
         assert arr.ndim  == 1
@@ -43,7 +67,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
         assert arr.ndim  == 3
         assert arr.dtype.kind == 'f'
 
-    tprint("  flds shape =", dimf)
+    tprint("  flds shape =", dimf, "without ghost=", dimf0)
     tprint("  flds ex,ey,ez,bx,by,bz dtype =",
             flds.ex.dtype, flds.ey.dtype, flds.ez.dtype,
             flds.bx.dtype, flds.by.dtype, flds.bz.dtype,
@@ -64,25 +88,8 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("  THREADING_LAYER", numba.config.THREADING_LAYER)
     tprint("  threading_layer()", numba.threading_layer())
 
+
     # -----------------------------------------
-    # Apply ghost cells, enforce array memory layout, enforce particle BCs
-
-    flds.ex = add_ghost(flds.ex, par)
-    flds.ey = add_ghost(flds.ey, par)
-    flds.ez = add_ghost(flds.ez, par)
-    flds.bx = add_ghost(flds.bx, par)
-    flds.by = add_ghost(flds.by, par)
-    flds.bz = add_ghost(flds.bz, par)
-
-    # row- vs column-order seems to affect performance at ~10% level
-    # (~3e-4 vs 3.5e-4, for 1000 prtl on dimf=(100+1,10+1,1+1))
-    flds.ex = np.ascontiguousarray(flds.ex)
-    flds.ey = np.ascontiguousarray(flds.ey)
-    flds.ez = np.ascontiguousarray(flds.ez)
-    flds.bx = np.ascontiguousarray(flds.bx)
-    flds.by = np.ascontiguousarray(flds.by)
-    flds.bz = np.ascontiguousarray(flds.bz)
-
     tprint("Pre-enforce prtl BCs")
 
     prtl_bc(
@@ -93,8 +100,6 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     user_prtl_bc(p.x,p.y,p.z,dimf)
 
     # -----------------------------------------
-    # Initial output
-
     tprint("Get prtl tracking flds for initial output")
     # E-component interpolations:
     p.ex = interp(flds.ex,p.x,p.y,p.z)
@@ -111,6 +116,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     p.wy   = np.zeros_like(p.x)
     p.wz   = np.zeros_like(p.x)
 
+    # -----------------------------------------
     tprint("Initial output")
     if not os.path.exists("output"):
         os.mkdir("output")
@@ -559,11 +565,11 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
 
         # x boundary condition
         if periodicx:
-            #px[ip] = np.mod(px[ip], dimf[0])  # modulo func is slow
-            if px[ip] > dimf[0]:
-                px[ip] -= dimf[0]
+            #px[ip] = np.mod(px[ip], dimf[0]-1)  # modulo func is slow
+            if px[ip] > dimf[0]-1:
+                px[ip] -= (dimf[0]-1)
             elif px[ip] < 0:
-                px[ip] += dimf[0]
+                px[ip] += (dimf[0]-1)
         else:
             #assert px[ip] >= 0             # asserts prevent numba parallelism
             #assert px[ip] <= dimf[0] - 1
@@ -572,11 +578,11 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
 
         # y boundary condition
         if periodicy:
-            #py[ip] = np.mod(py[ip], dimf[1])  # modulo func is slow
-            if py[ip] > dimf[1]:
-                py[ip] -= dimf[1]
+            #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
+            if py[ip] > dimf[1]-1:
+                py[ip] -= (dimf[1]-1)
             elif py[ip] < 0:
-                py[ip] += dimf[1]
+                py[ip] += (dimf[1]-1)
         else:
             #assert py[ip] >= 0             # asserts prevent numba parallelism
             #assert py[ip] <= dimf[1] - 1
@@ -585,11 +591,11 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
 
         # z boundary condition
         if periodicz:
-            #pz[ip] = np.mod(pz[ip], dimf[2])  # modulo func is slow
-            if pz[ip] > dimf[2]:
-                pz[ip] -= dimf[2]
+            #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
+            if pz[ip] > dimf[2]-1:
+                pz[ip] -= (dimf[2]-1)
             elif pz[ip] < 0:
-                pz[ip] += dimf[2]
+                pz[ip] += (dimf[2]-1)
         else:
             #assert pz[ip] >= 0             # asserts prevent numba parallelism
             #assert pz[ip] <= dimf[2] - 1

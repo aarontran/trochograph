@@ -10,9 +10,6 @@ Usage:
 
     NUMBA_NUM_THREADS={xx} python user_{...}.py
 
-Coordinates:
-* Periodic domains: x \in [0, dimf[0]), y \in [0, dimf[1]), z \in [0, dimf[2])
-* No yee mesh for fields
 """
 
 from __future__ import division, print_function
@@ -96,17 +93,17 @@ def user_flds(par):
       y in [0, fld.shape[1]-1)
       z in [0, fld.shape[2]-1)
     """
-    dimf = (200, 1, 10)  # for interval=20, lecs travel at most 9 cells in one step, so 10 cells allows to reconstruct x,z traj
+    shape = (200, 1, 10)  # for interval=20, lecs travel at most 9 cells in one step, so 10 cells allows to reconstruct x,z traj
     btheta = 65*np.pi/180  # angle between B and shock normal in radians
     rRH = 2  # density jump
     # ramp at x=100+/-30 cell
-    xx = np.arange(dimf[0])
+    xx = np.arange(shape[0])
     ramp_profile = (1 + (rRH-1)*0.5*(np.tanh((100-xx)/30)+1))  # 1D array
 
     # numpy default should be C ordering already, but force just to be safe
-    # row- vs column-order seems to affect numba+interp performance at ~10% level  (~3e-4 vs 3.5e-4, for 1000 prtl on dimf=(100+1,10+1,1+1))
-    ones = np.ones(dimf, dtype=np.float64, order='C')
-    zeros = np.zeros(dimf, dtype=np.float64, order='C')
+    # row- vs column-order seems to affect numba+interp performance at ~10% level  (~3e-4 vs 3.5e-4, for 1000 prtl on shape=(100+1,10+1,1+1))
+    ones = np.ones(shape, dtype=np.float64, order='C')
+    zeros = np.zeros(shape, dtype=np.float64, order='C')
 
     flds = Fields()
     flds.ex = zeros
@@ -125,7 +122,7 @@ def user_flds(par):
 def user_prtl(flds):
     """
     Return p.{x,y,z,u,v,w} to initialize prtl
-    dimf = fields shape as provided by user, /without/ ghost cells
+    flds = fields /with/ ghost cells attached, in case needed for prtl init
         user is responsible for initializing prtls in correct region,
         accounting for presence or absence of ghost cells.
     """
@@ -139,8 +136,8 @@ def user_prtl(flds):
     dimf = flds.ex.shape
 
     p.x = np.random.uniform(190, 191, size=nprtl)
-    p.y = np.random.uniform(  0, dimf[1], size=nprtl)
-    p.z = np.random.uniform(  0, dimf[2], size=nprtl)
+    p.y = np.random.uniform(  0, dimf[1]-1, size=nprtl)
+    p.z = np.random.uniform(  0, dimf[2]-1, size=nprtl)
     p.u = -0.01 + np.random.normal(0, scale=0.05/3**0.5, size=nprtl)
     p.v =         np.random.normal(0, scale=0.05/3**0.5, size=nprtl)
     p.w =         np.random.normal(0, scale=0.05/3**0.5, size=nprtl)
@@ -153,7 +150,7 @@ def user_prtl(flds):
 
 @numba.njit(cache=True,parallel=True)
 def user_prtl_bc(px, py, pz, dimf):
-    """Given prtl position arrays px,py,pz and user-input fld size dimf;
+    """Given prtl position arrays px,py,pz and fld size dimf (w/ghost cells),
     modify px,py,pz to implement user's desired BCs.
     """
     #for ip in numba.prange(px.size):
@@ -163,17 +160,17 @@ def user_prtl_bc(px, py, pz, dimf):
     #    if px[ip] < 0 or px[ip] > dimf[0]-1:
     #        px[ip] = np.nan
     #    # y periodic boundary condition, with ghost cell
-    #    #py[ip] = np.mod(py[ip], dimf[1])  # modulo func is slow
-    #    if py[ip] > dimf[1]:
-    #        py[ip] -= dimf[1]
+    #    #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
+    #    if py[ip] > dimf[1]-1:
+    #        py[ip] -= (dimf[1]-1)
     #    elif py[ip] < 0:
-    #        py[ip] += dimf[1]
+    #        py[ip] += (dimf[1]-1)
     #    # z periodic boundary condition, with ghost cell
-    #    #pz[ip] = np.mod(pz[ip], dimf[2])  # modulo func is slow
-    #    if pz[ip] > dimf[2]:
-    #        pz[ip] -= dimf[2]
+    #    #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
+    #    if pz[ip] > dimf[2]-1:
+    #        pz[ip] -= (dimf[2]-1)
     #    elif pz[ip] < 0:
-    #        pz[ip] += dimf[2]
+    #        pz[ip] += (dimf[2]-1)
     return
 
 

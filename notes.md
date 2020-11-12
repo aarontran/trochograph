@@ -34,7 +34,8 @@ coordinates (2 ghost cells, and change from 1- to 0-based indexing).
 Boundary conditions
 -------------------
 Periodic boundaries will attach 1 ghost cell layer at each "far" boundary.
-Motivation: consider fields with dimf = (5, 1, 1), periodic in all directions.
+Motivation: consider user-input fields with shape = (5, 1, 1), periodic in all
+directions.
 
         y=1 .____.____.____.____.____.      @ = physical vertex where
             |    |    |    |    |    |          flds are defined
@@ -45,14 +46,15 @@ We use 3-D interpolation, so every particle must lie between 2 vertices in each
 of x,y,z directions; we do NOT treat 1D/2D simulations as special cases.
 The valid particle domain is thus:
 
-    x in [0, 5) = [0, dimf[0])
-    y in [0, 1) = [0, dimf[1])
-    z in [0, 1) = [0, dimf[2])
+    x in [0, 5)
+    y in [0, 1)
+    z in [0, 1)
 
 For a fully-periodic domain, the field values live at "lower left" corner of
 grid, with respect to the cell volume in which particles reside.
 
-Now consider an outflow boundary in x and periodic boundaries in y,z.
+Now consider the same user-input flds, but with an outflow boundary in x and
+periodic boundaries in y,z.
 
         y=1 .____.____.____.____.           @ = physical vertex where
             |    |    |    |    |               flds are defined
@@ -61,9 +63,9 @@ Now consider an outflow boundary in x and periodic boundaries in y,z.
 
 Fields are not defined past x=4, so the particle domain is:
 
-    x in [0, 4) = [0, dimf[0]-1)
-    y in [0, 1) = [0, dimf[1])
-    z in [0, 1) = [0, dimf[2])
+    x in [0, 4)
+    y in [0, 1)
+    z in [0, 1)
 
 
 More detail on TRISTAN coordinates
@@ -310,3 +312,13 @@ Not-used strategies:
   + con: extra layer of abstraction = conceptual overhead.
     user may bypass "xlim,ylim,zlim" abstraction layer anyways
     should they choose to specify custom BCs
+
+
+2020 Nov 11
+-----------
+
+Attach ghost cells to flds before prtl init.  Why?  User may want to interp
+flds at prtl position, which requires ghost cells to be present.
+
+Redefine "dimf" to mean fld dimensions w/ghost cells attached... not 100% sure
+if I'll keep this convention.

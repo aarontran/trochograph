@@ -10,9 +10,6 @@ Usage:
 
     NUMBA_NUM_THREADS={xx} python user_{...}.py
 
-Coordinates:
-* Periodic domains: x \in [0, dimf[0]), y \in [0, dimf[1]), z \in [0, dimf[2])
-* No yee mesh for fields
 """
 
 from __future__ import division, print_function
@@ -112,7 +109,12 @@ def user_flds(par):
 
 
 def user_prtl(flds):
-    """Return p.{x,y,z,u,v,w} to initialize prtl"""
+    """
+    Return p.{x,y,z,u,v,w} to initialize prtl
+    flds = fields /with/ ghost cells attached, in case needed for prtl init
+        user is responsible for initializing prtls in correct region,
+        accounting for presence or absence of ghost cells.
+    """
 
     tprtl = SCENE.prtl('xe','ye','ze','ue','ve','we','proce','inde')
 
@@ -145,7 +147,7 @@ def user_prtl(flds):
 
 @numba.njit(cache=True,parallel=True)
 def user_prtl_bc(px, py, pz, dimf):
-    """Given prtl position arrays px,py,pz and user-input fld size dimf;
+    """Given prtl position arrays px,py,pz and fld size dimf (w/ghost cells),
     modify px,py,pz to implement user's desired BCs.
     """
     #for ip in numba.prange(px.size):
@@ -157,17 +159,17 @@ def user_prtl_bc(px, py, pz, dimf):
     #    if px[ip] < 0 or px[ip] > dimf[0]-1:
     #        px[ip] = np.nan
     #    # y periodic boundary condition, with ghost cell
-    #    #py[ip] = np.mod(py[ip], dimf[1])  # modulo func is slow
-    #    if py[ip] > dimf[1]:
-    #        py[ip] -= dimf[1]
+    #    #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
+    #    if py[ip] > dimf[1]-1:
+    #        py[ip] -= (dimf[1]-1)
     #    elif py[ip] < 0:
-    #        py[ip] += dimf[1]
+    #        py[ip] += (dimf[1]-1)
     #    # z periodic boundary condition, with ghost cell
-    #    #pz[ip] = np.mod(pz[ip], dimf[2])  # modulo func is slow
-    #    if pz[ip] > dimf[2]:
-    #        pz[ip] -= dimf[2]
+    #    #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
+    #    if pz[ip] > dimf[2]-1:
+    #        pz[ip] -= (dimf[2]-1)
     #    elif pz[ip] < 0:
-    #        pz[ip] += dimf[2]
+    #        pz[ip] += (dimf[2]-1)
     return
 
 
