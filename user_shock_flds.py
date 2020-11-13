@@ -146,9 +146,10 @@ def user_prtl(flds):
 
 
 @numba.njit(cache=True,parallel=True)
-def user_prtl_bc(px, py, pz, dimf):
-    """Given prtl position arrays px,py,pz and fld size dimf (w/ghost cells),
-    modify px,py,pz to implement user's desired BCs.
+def user_prtl_bc(px, py, pz, pu, pv, pw, dimf):
+    """Given prtl position, velocity arrays px,py,pz,pu,pv,pw
+    and fld size dimf (w/ghost cells),
+    modify prtl arrays to implement user's desired BCs.
     """
     #for ip in numba.prange(px.size):
     #    # x boundary condition - enforce no prtl exit domain

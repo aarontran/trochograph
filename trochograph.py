@@ -93,11 +93,11 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("Pre-enforce prtl BCs")
 
     prtl_bc(
-        p.x,p.y,p.z,dimf,
+        p.x,p.y,p.z,p.u,p.v,p.w,dimf,
         par['periodicx'],par['periodicy'],par['periodicz']
     )
 
-    user_prtl_bc(p.x,p.y,p.z,dimf)
+    user_prtl_bc(p.x,p.y,p.z,p.u,p.v,p.w,dimf)
 
     # -----------------------------------------
     tprint("Get prtl tracking flds for initial output")
@@ -149,11 +149,11 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
         tlap1 = datetime.now()
 
         prtl_bc(
-            p.x,p.y,p.z,dimf,
+            p.x,p.y,p.z,p.u,p.v,p.w,dimf,
             par['periodicx'],par['periodicy'],par['periodicz']
         )
 
-        user_prtl_bc(p.x,p.y,p.z,dimf)
+        user_prtl_bc(p.x,p.y,p.z,p.u,p.v,p.w,dimf)
 
         tlap2 = datetime.now()
 
@@ -244,6 +244,9 @@ def mover(
         #   y in [0, fld.shape[1]-1)
         #   z in [0, fld.shape[2]-1)
         # if using prtl.tot coordinates
+
+        if np.isnan(px[ip]) or np.isnan(py[ip]) or np.isnan(pz[ip]):
+            continue
 
         i=int(px[ip])
         dx=px[ip]-i
@@ -556,7 +559,7 @@ def add_ghost(fld, par):
 
 
 @numba.njit(cache=True,parallel=True)
-def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
+def prtl_bc(px, py, pz, pu, pv, pw, dimf, periodicx, periodicy, periodicz):
     """Given p, dimf; update p according to desired BCs for dimf
     dimf = fld shape provided by user, NOT including ghost cells
         for periodic bdry
@@ -571,10 +574,13 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
             elif px[ip] < 0:
                 px[ip] += (dimf[0]-1)
         else:
-            #assert px[ip] >= 0             # asserts prevent numba parallelism
-            #assert px[ip] <= dimf[0] - 1
             if px[ip] < 0 or px[ip] > dimf[0]-1:
                 px[ip] = np.nan
+                py[ip] = np.nan
+                pz[ip] = np.nan
+                pu[ip] = np.nan
+                pv[ip] = np.nan
+                pw[ip] = np.nan
 
         # y boundary condition
         if periodicy:
@@ -584,10 +590,13 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
             elif py[ip] < 0:
                 py[ip] += (dimf[1]-1)
         else:
-            #assert py[ip] >= 0             # asserts prevent numba parallelism
-            #assert py[ip] <= dimf[1] - 1
             if py[ip] < 0 or py[ip] > dimf[1]-1:
+                px[ip] = np.nan
                 py[ip] = np.nan
+                pz[ip] = np.nan
+                pu[ip] = np.nan
+                pv[ip] = np.nan
+                pw[ip] = np.nan
 
         # z boundary condition
         if periodicz:
@@ -597,10 +606,13 @@ def prtl_bc(px, py, pz, dimf, periodicx, periodicy, periodicz):
             elif pz[ip] < 0:
                 pz[ip] += (dimf[2]-1)
         else:
-            #assert pz[ip] >= 0             # asserts prevent numba parallelism
-            #assert pz[ip] <= dimf[2] - 1
             if pz[ip] < 0 or pz[ip] > dimf[2]-1:
+                px[ip] = np.nan
+                py[ip] = np.nan
                 pz[ip] = np.nan
+                pu[ip] = np.nan
+                pv[ip] = np.nan
+                pw[ip] = np.nan
     return
 
 
