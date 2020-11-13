@@ -57,6 +57,15 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
     p = user_prtl(flds)
 
+    # dimf bounds minus machine epsilon, for use with prtl BCs
+    # np.spacing(..., dtype=...) cannot be numba compiled,
+    # so must compute prior to evolution loop
+    dimfeps = (
+            dimf[0]-1 - np.spacing(dimf[0]-1, dtype=p.x.dtype),
+            dimf[1]-1 - np.spacing(dimf[1]-1, dtype=p.y.dtype),
+            dimf[2]-1 - np.spacing(dimf[2]-1, dtype=p.z.dtype),
+    )
+
     # -----------------------------------------
     # some checks, report to stdout
 
@@ -93,7 +102,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("Pre-enforce prtl BCs")
 
     prtl_bc(
-        p.x,p.y,p.z,p.u,p.v,p.w,dimf,
+        p.x,p.y,p.z,p.u,p.v,p.w,dimf,dimfeps,
         par['periodicx'],par['periodicy'],par['periodicz']
     )
 
@@ -143,13 +152,13 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
             p.x,p.y,p.z,p.u,p.v,p.w,
             p.wtot,p.wprl,p.wx,p.wy,p.wz,
             p.ex,p.ey,p.ez,p.bx,p.by,p.bz,
-            par['qm'],par['c']
+            par['qm'],par['c'],dimfeps,
         )
 
         tlap1 = datetime.now()
 
         prtl_bc(
-            p.x,p.y,p.z,p.u,p.v,p.w,dimf,
+            p.x,p.y,p.z,p.u,p.v,p.w,dimf,dimfeps,
             par['periodicx'],par['periodicy'],par['periodicz']
         )
 
@@ -211,7 +220,7 @@ def mover(
         px,py,pz,pu,pv,pw,
         pwtot,pwprl,pwx,pwy,pwz,
         pex,pey,pez,pbx,pby,pbz,
-        qm,c
+        qm,c,dimfeps
 ):
     """Boris particle mover"""
 
@@ -559,22 +568,26 @@ def add_ghost(fld, par):
 
 
 @numba.njit(cache=True,parallel=True)
-def prtl_bc(px, py, pz, pu, pv, pw, dimf, periodicx, periodicy, periodicz):
+def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodicz):
     """Given p, dimf; update p according to desired BCs for dimf
     dimf = fld shape provided by user, NOT including ghost cells
         for periodic bdry
     """
+    mx = dimf[0] - 1  # prtl bdry, dimf with ghost cells
+    my = dimf[1] - 1
+    mz = dimf[2] - 1
+
     for ip in numba.prange(px.size):
 
         # x boundary condition
         if periodicx:
-            #px[ip] = np.mod(px[ip], dimf[0]-1)  # modulo func is slow
-            if px[ip] > dimf[0]-1:
-                px[ip] -= (dimf[0]-1)
+            #px[ip] = np.mod(px[ip], mx)  # modulo func is slow
+            if px[ip] > mx:
+                px[ip] = max(px[ip] - mx, 0.0)
             elif px[ip] < 0:
-                px[ip] += (dimf[0]-1)
+                px[ip] = min(px[ip] + mx, mx-dimfeps[0])
         else:
-            if px[ip] < 0 or px[ip] > dimf[0]-1:
+            if px[ip] < 0 or px[ip] > mx:
                 px[ip] = np.nan
                 py[ip] = np.nan
                 pz[ip] = np.nan
@@ -584,13 +597,13 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, periodicx, periodicy, periodicz):
 
         # y boundary condition
         if periodicy:
-            #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
-            if py[ip] > dimf[1]-1:
-                py[ip] -= (dimf[1]-1)
+            #py[ip] = np.mod(py[ip], my)  # modulo func is slow
+            if py[ip] > my:
+                py[ip] = max(py[ip] - my, 0.0)
             elif py[ip] < 0:
-                py[ip] += (dimf[1]-1)
+                py[ip] = min(py[ip] + my, my-dimfeps[1])
         else:
-            if py[ip] < 0 or py[ip] > dimf[1]-1:
+            if py[ip] < 0 or py[ip] > my:
                 px[ip] = np.nan
                 py[ip] = np.nan
                 pz[ip] = np.nan
@@ -600,13 +613,13 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, periodicx, periodicy, periodicz):
 
         # z boundary condition
         if periodicz:
-            #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
-            if pz[ip] > dimf[2]-1:
-                pz[ip] -= (dimf[2]-1)
+            #pz[ip] = np.mod(pz[ip], mz)  # modulo func is slow
+            if pz[ip] > mz:
+                pz[ip] = max(pz[ip] - mz, 0.0)
             elif pz[ip] < 0:
-                pz[ip] += (dimf[2]-1)
+                pz[ip] = min(pz[ip] + mz, mz-dimfeps[2])
         else:
-            if pz[ip] < 0 or pz[ip] > dimf[2]-1:
+            if pz[ip] < 0 or pz[ip] > mz:
                 px[ip] = np.nan
                 py[ip] = np.nan
                 pz[ip] = np.nan

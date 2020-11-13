@@ -314,11 +314,39 @@ Not-used strategies:
     should they choose to specify custom BCs
 
 
-2020 Nov 11
------------
+2020 Nov 11-13
+--------------
 
 Attach ghost cells to flds before prtl init.  Why?  User may want to interp
 flds at prtl position, which requires ghost cells to be present.
 
 Redefine "dimf" to mean fld dimensions w/ghost cells attached... not 100% sure
 if I'll keep this convention.
+
+New problem: interpolation breaks for particle at "left" periodic boundary.
+With single prec, prtl move from "left" to "right" bdry lands exactly on x=100
+(offset of -2e-6 is too small to be preserved), where x=100 is right edge of
+ghost cell.
+
+    lap=354032, x=0.019836653
+        interp: x,y,z= 0.019836653 9579.649 99.512665
+        interp: i,j,k= 0 9579 99
+        interp: dx,dy,dz= 0.019836653023958206 0.6494140625 0.512664794921875
+        b4 perbc, x= -2.1950839e-06
+        aft perbc, x= 100.0
+
+    lap=354033, x=0.019836653
+        interp: x,y,z= 100.0 9579.619 99.48136
+        interp: i,j,k= 100 9579 99
+        interp: dx,dy,dz= 0.0 0.619140625 0.48136138916015625
+
+Why doesn't this happen in TRISTAN?  Ghost cells on both sides of bdry allows
+this to work.  Two options to fix:
+1. add one ghost cell layer on each bdry, to prevent interp breaking
+2. apply floor/ceil to prtl positions, to force strictly within [0, dimf[i]-1).
+
+The "right" side bdry needs estimate of machine epsilon.
+Floor/ceil might introduce some subtle numerical bias?... but, I expect less
+than already-present floating pt noise.
+
+Result: BC wall-time cost remains ~same, compared to Nov 10 code, so OK.
