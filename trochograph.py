@@ -12,6 +12,7 @@ import h5py
 import numba
 import numpy as np
 import os
+import psutil
 
 
 class Fields(object):
@@ -86,7 +87,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
             p.x.dtype, p.y.dtype, p.z.dtype,
             p.u.dtype, p.v.dtype, p.w.dtype
     )
-    tprint("Input parameters:", p.x.size)
+    tprint("Input parameters:")
     for kk in sorted(par):
         tprint("  {:s} = {}".format(kk, par[kk]))
 
@@ -97,6 +98,9 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("  THREADING_LAYER", numba.config.THREADING_LAYER)
     tprint("  threading_layer()", numba.threading_layer())
 
+    # https://stackoverflow.com/questions/938733/total-memory-used-by-python-process
+    mem = psutil.Process(os.getpid()).memory_info().rss
+    tprint("Process ID", os.getpid(), "using mem", mem/1e6, "MB")
 
     # -----------------------------------------
     tprint("Pre-enforce prtl BCs")
