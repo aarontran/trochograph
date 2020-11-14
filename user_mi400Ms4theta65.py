@@ -76,7 +76,7 @@ def user_flds(par):
     # tile along BOTH z,x to help w/ prtl tracing in post-processing
     # length is 1/2 interval, so c-speed prtl travels < half box
     # be careful abt memory usage
-    ones = np.ones( (10, tflds['e'][0].shape[1], 100), dtype=np.float32, order='C')  # single prec
+    ones = np.ones( (100, tflds['e'][0].shape[1], 100), dtype=np.float32, order='C')  # single prec
 
     flds = Fields()
     #flds.ex = np.tile( tflds['e'][0], (100,1,100) )
