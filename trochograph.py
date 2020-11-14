@@ -218,6 +218,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     return
 
 
+#boundscheck=True
 @numba.njit(cache=True,fastmath=True,parallel=True)
 def mover(
         bx,by,bz,ex,ey,ez,
@@ -459,6 +460,7 @@ def mover(
     return
 
 
+#boundscheck=True
 @numba.njit(cache=True,fastmath=True,parallel=True)
 def interp(fld,x,y,z):
     """Linearly interpolate fld to input x,y,z position(s)
@@ -570,13 +572,14 @@ def add_ghost(fld, par):
     return fld
 
 
-
-@numba.njit(cache=True,parallel=True)
+@numba.njit(cache=True,fastmath=True,parallel=True)
 def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodicz):
     """Given p, dimf; update p according to desired BCs for dimf
     dimf = fld shape provided by user, NOT including ghost cells
         for periodic bdry
     """
+    # domain [0,mx) x [0,my) x [0,mz) is strict,
+    # prtl at x=mx, y=my, z=mz will break prtl interp (index out of bounds)
     mx = dimf[0] - 1  # prtl bdry, dimf with ghost cells
     my = dimf[1] - 1
     mz = dimf[2] - 1
@@ -588,13 +591,12 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodi
 
         # x boundary condition
         if periodicx:
-            #px[ip] = np.mod(px[ip], mx)  # modulo func is slow
-            if px[ip] > mx:
+            if px[ip] >= mx:
                 px[ip] = max(px[ip] - mx, 0.0)
             elif px[ip] < 0:
                 px[ip] = min(px[ip] + mx, mx-dimfeps[0])
         else:
-            if px[ip] < 0 or px[ip] > mx:
+            if px[ip] < 0 or px[ip] >= mx:
                 px[ip] = np.nan
                 py[ip] = np.nan
                 pz[ip] = np.nan
@@ -604,13 +606,12 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodi
 
         # y boundary condition
         if periodicy:
-            #py[ip] = np.mod(py[ip], my)  # modulo func is slow
-            if py[ip] > my:
+            if py[ip] >= my:
                 py[ip] = max(py[ip] - my, 0.0)
             elif py[ip] < 0:
                 py[ip] = min(py[ip] + my, my-dimfeps[1])
         else:
-            if py[ip] < 0 or py[ip] > my:
+            if py[ip] < 0 or py[ip] >= my:
                 px[ip] = np.nan
                 py[ip] = np.nan
                 pz[ip] = np.nan
@@ -620,13 +621,12 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodi
 
         # z boundary condition
         if periodicz:
-            #pz[ip] = np.mod(pz[ip], mz)  # modulo func is slow
-            if pz[ip] > mz:
+            if pz[ip] >= mz:
                 pz[ip] = max(pz[ip] - mz, 0.0)
             elif pz[ip] < 0:
                 pz[ip] = min(pz[ip] + mz, mz-dimfeps[2])
         else:
-            if pz[ip] < 0 or pz[ip] > mz:
+            if pz[ip] < 0 or pz[ip] >= mz:
                 px[ip] = np.nan
                 py[ip] = np.nan
                 pz[ip] = np.nan

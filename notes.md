@@ -355,3 +355,32 @@ Result: BC wall-time cost remains ~same, compared to Nov 10 code, so OK.
 2020 Nov 13 - more prtl BC bugfixes
 -----------------------------------
 In prtl BC, skipping x,y,z=Nan prtl cuts BC time ~10%, from 2.32 to 2.05 sec.
+
+Another prtl BC bug: in domain check, accidentally did `>` instead of `>=` in:
+
+    if periodicx:
+        if px[ip] >= mx:
+            px[ip] = max(px[ip] - mx, 0.0)
+        ...
+
+Earlier bug, prtl BC teleported prtl from x=-2e-6 to x=mx (mx=100.0), segfault.
+Now, prtl moves to x=100.0 by itself, we need prtl BC to flag and teleport;
+if missed it will segfault.
+
+For testing BCs, helpful to check behavior with single prec, slow-moving prtl,
+large domain size (mx=100 rather than 1).
+
+Tried a more compact periodic BC implementation from tristan?
+Old scheme:
+
+    if px[ip] >= mx:
+        px[ip] = max(px[ip] - mx, 0.0)
+    elif px[ip] < 0:
+        px[ip] = min(px[ip] + mx, mx-dimfeps[0])
+
+New scheme:
+
+    perx = np.copysign(0.5*mx,px[ip]) + np.copysign(0.5*mx,px[ip]-mx)
+    px[ip] = min(max(px[ip]-perx,0.0),mx-dimfeps[0])
+
+Result: same within 1% of prtl BC time or less (so ~0.1% of overall time).
