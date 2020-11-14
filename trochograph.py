@@ -58,13 +58,13 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
     p = user_prtl(flds)
 
-    # dimf bounds minus machine epsilon, for use with prtl BCs
+    # machine epsilon at values of dimf bounds, for use with prtl BCs
     # np.spacing(..., dtype=...) cannot be numba compiled,
     # so must compute prior to evolution loop
     dimfeps = (
-            dimf[0]-1 - np.spacing(dimf[0]-1, dtype=p.x.dtype),
-            dimf[1]-1 - np.spacing(dimf[1]-1, dtype=p.y.dtype),
-            dimf[2]-1 - np.spacing(dimf[2]-1, dtype=p.z.dtype),
+        np.spacing(dimf[0]-1, dtype=p.x.dtype),
+        np.spacing(dimf[1]-1, dtype=p.y.dtype),
+        np.spacing(dimf[2]-1, dtype=p.z.dtype),
     )
 
     # -----------------------------------------
@@ -156,7 +156,7 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
             p.x,p.y,p.z,p.u,p.v,p.w,
             p.wtot,p.wprl,p.wx,p.wy,p.wz,
             p.ex,p.ey,p.ez,p.bx,p.by,p.bz,
-            par['qm'],par['c'],dimfeps,
+            par['qm'],par['c'],
         )
 
         tlap1 = datetime.now()
@@ -224,7 +224,7 @@ def mover(
         px,py,pz,pu,pv,pw,
         pwtot,pwprl,pwx,pwy,pwz,
         pex,pey,pez,pbx,pby,pbz,
-        qm,c,dimfeps
+        qm,c
 ):
     """Boris particle mover"""
 
