@@ -2,8 +2,7 @@
 """
 user_{...}.py is the main user-facing interface to trochograph, a test-particle
 tracing program.  This user file serves as both
-* configuration: user specifies input parameters, fields, particles, and
-  particle boundary conditions
+* configuration: user specifies input parameters, fields, particles
 * main program: calls run_trochograph(...) to start the evolution loop.
 
 Usage:
@@ -145,35 +144,6 @@ def user_prtl(flds):
     return p
 
 
-@numba.njit(cache=True,parallel=True)
-def user_prtl_bc(px, py, pz, pu, pv, pw, dimf):
-    """Given prtl position, velocity arrays px,py,pz,pu,pv,pw
-    and fld size dimf (w/ghost cells),
-    modify prtl arrays to implement user's desired BCs.
-    """
-    #for ip in numba.prange(px.size):
-    #    # x boundary condition - enforce no prtl exit domain
-    #    # user_shock_twowalls.F90 sets leftwall=15, so x=12 for us
-    #    # (fortran 1-based indexing and 2 ghost cells)
-    #    #assert px[ip] >= 0             # asserts prevent numba parallelism
-    #    #assert px[ip] <= dimf[0] - 1
-    #    if px[ip] < 0 or px[ip] > dimf[0]-1:
-    #        px[ip] = np.nan
-    #    # y periodic boundary condition, with ghost cell
-    #    #py[ip] = np.mod(py[ip], dimf[1]-1)  # modulo func is slow
-    #    if py[ip] > dimf[1]-1:
-    #        py[ip] -= (dimf[1]-1)
-    #    elif py[ip] < 0:
-    #        py[ip] += (dimf[1]-1)
-    #    # z periodic boundary condition, with ghost cell
-    #    #pz[ip] = np.mod(pz[ip], dimf[2]-1)  # modulo func is slow
-    #    if pz[ip] > dimf[2]-1:
-    #        pz[ip] -= (dimf[2]-1)
-    #    elif pz[ip] < 0:
-    #        pz[ip] += (dimf[2]-1)
-    return
-
-
 if __name__ == '__main__':
     print("Trochograph started from:", path.basename(__file__))
-    run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc)
+    run_trochograph(user_input, user_flds, user_prtl)

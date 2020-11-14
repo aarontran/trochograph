@@ -23,7 +23,7 @@ class Particles(object):
     pass
 
 
-def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
+def run_trochograph(user_input, user_flds, user_prtl):
     """Main execution loop of trochograph"""
 
     # -----------------------------------------
@@ -110,8 +110,6 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
         par['periodicx'],par['periodicy'],par['periodicz']
     )
 
-    user_prtl_bc(p.x,p.y,p.z,p.u,p.v,p.w,dimf)
-
     # -----------------------------------------
     tprint("Get prtl tracking flds for initial output")
     # E-component interpolations:
@@ -142,7 +140,6 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     t1 = datetime.now()
     tlaptot = 0
     tlaprestmov = 0
-    tlaprestbc = 0
     tlaprestout = 0
     tlapfirst = 0
 
@@ -163,37 +160,30 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
         tlap1 = datetime.now()
 
-        user_prtl_bc(p.x,p.y,p.z,p.u,p.v,p.w,dimf)
-
-        tlap2 = datetime.now()
-
         fwrote = output(p,par,lap)
 
-        tlap3 = datetime.now()
+        tlap2 = datetime.now()
 
         # lap stdout and time accounting
 
         dtlap1_0 = (tlap1-tlap0).total_seconds()  # deltas
         dtlap2_1 = (tlap2-tlap1).total_seconds()
-        dtlap3_2 = (tlap3-tlap2).total_seconds()
-        dtlap3_0 = (tlap3-tlap0).total_seconds()  # total
+        dtlap2_0 = (tlap2-tlap0).total_seconds()  # total
 
-        tprint("  move {:.3e} bc {:.3e} out {:.3e} tot {:.3e}".format(
+        tprint("  move {:.3e} out {:.3e} tot {:.3e}".format(
             dtlap1_0,
             dtlap2_1,
-            dtlap3_2,
-            dtlap3_0,
+            dtlap2_0,
         ))
         if fwrote:
             tprint("  wrote", fwrote)
 
-        tlaptot += dtlap3_0
+        tlaptot += dtlap2_0
         if lap == par['lapst']+1:
-            tlapfirst = dtlap3_0
+            tlapfirst = dtlap2_0
         else:
             tlaprestmov += dtlap1_0
-            tlaprestbc += dtlap2_1
-            tlaprestout += dtlap3_2
+            tlaprestout += dtlap2_1
 
     # -----------------------------------------
     # finalize
@@ -206,7 +196,6 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
     tprint("    first lap", tlapfirst)
     tprint("    rest laps", tlaptot - tlapfirst)
     tprint("      rest mover", tlaprestmov)
-    tprint("      rest bc", tlaprestbc)
     tprint("      rest output", tlaprestout)
 
     #interp.parallel_diagnostics(level=4)
