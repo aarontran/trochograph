@@ -423,3 +423,42 @@ Trial #2, no inlined.  Decent amount of fluctuation.
       rest output 1.1868879999997357
 
 OK, definitely want to inline... but, how to do right?
+
+Option #0: copy-paste stuff around.
+
+Option #1: refactor prtl BC slghtly.
+
+    prtl_bc_all  # compiled wrapper, loop over prtl to call prtl_bc
+    output
+    for lap in range(lapst+1, last+1)
+        move
+        prtl_bc
+        output
+
+Option #2: re-order the loop, avoid special-case handling for first output
+
+    for lap in range(lapst, last+1)  # end up with an "extra" move
+        prtlbc
+        output
+        move...
+
+
+TODO/enhancement list
+---------------------
+
+* jitclass - do away with these long unwieldy function arglists?
+
+* speculative idea: chunk up loop? move prtl for 10s or 100s of lap, until have
+  to resync for output..
+
+    for lap_chunk in lap_all:
+        for p in prtl: <- compile over this loop
+            for lap in lap_chunk:
+                move
+                prtlbc
+        output
+
+  b/c test prtl needn't update flds, it's embarassingly parallelizable.
+  but if we update flds in time-dependent fashion, this chunking would not
+  work (flds arrays assumed constant).  that is a likely use case, prtl tracing
+  in a fluctuating wave field, so chunking prbably too restrictive.

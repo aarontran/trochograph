@@ -163,11 +163,6 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
         tlap1 = datetime.now()
 
-#        prtl_bc(
-#            p.x,p.y,p.z,p.u,p.v,p.w,dimf,dimfeps,
-#            par['periodicx'],par['periodicy'],par['periodicz']
-#        )
-
         user_prtl_bc(p.x,p.y,p.z,p.u,p.v,p.w,dimf)
 
         tlap2 = datetime.now()
@@ -233,12 +228,6 @@ def mover(
     """Boris particle mover"""
 
     cinv=1./c
-
-    # domain [0,mx) x [0,my) x [0,mz) is strict,
-    # prtl at x=mx, y=my, z=mz will break prtl interp (index out of bounds)
-    mx = dimf[0] - 1  # prtl bdry, dimf with ghost cells
-    my = dimf[1] - 1
-    mz = dimf[2] - 1
 
     # Fortran/TRISTAN indexing convention
     #ix=1
@@ -458,32 +447,10 @@ def mover(
         py[ip] = py[ip] + pv[ip]*g*c
         pz[ip] = pz[ip] + pw[ip]*g*c
 
-        if periodicx:
-            if px[ip] >= mx:
-                px[ip] = max(px[ip] - mx, 0.0)
-            elif px[ip] < 0:
-                px[ip] = min(px[ip] + mx, mx-dimfeps[0])
-        else:
-            if px[ip] < 0 or px[ip] >= mx:
-                px[ip] = np.nan
-
-        if periodicy:
-            if py[ip] >= my:
-                py[ip] = max(py[ip] - my, 0.0)
-            elif py[ip] < 0:
-                py[ip] = min(py[ip] + my, my-dimfeps[1])
-        else:
-            if py[ip] < 0 or py[ip] >= my:
-                py[ip] = np.nan
-
-        if periodicz:
-            if pz[ip] >= mz:
-                pz[ip] = max(pz[ip] - mz, 0.0)
-            elif pz[ip] < 0:
-                pz[ip] = min(pz[ip] + mz, mz-dimfeps[2])
-        else:
-            if pz[ip] < 0 or pz[ip] >= mz:
-                pz[ip] = np.nan
+        prtl_bc_one(
+            px,py,pz,ip,
+            dimf,dimfeps,periodicx,periodicy,periodicz
+        )
 
         # Save fields used (NOTICE THAT THERE'S AN OFFSET!!!!!... fields used at PREVIOUS LOCATION, or "in-between" locations if you like)
         pex[ip] = ex0 / (0.5*qm)
@@ -609,51 +576,60 @@ def add_ghost(fld, par):
 
 
 @numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
-def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodicz):
-    """Given p, dimf; update p according to desired BCs for dimf
-    dimf = fld shape provided by user, NOT including ghost cells
-        for periodic bdry
-    """
+def prtl_bc_one(px, py, pz, ip, dimf, dimfeps, periodicx, periodicy, periodicz):
+    """Return x,y,z after applying BC"""
+
+    if np.isnan(px[ip]) or np.isnan(py[ip]) or np.isnan(pz[ip]):
+        return
+
     # domain [0,mx) x [0,my) x [0,mz) is strict,
     # prtl at x=mx, y=my, z=mz will break prtl interp (index out of bounds)
     mx = dimf[0] - 1  # prtl bdry, dimf with ghost cells
     my = dimf[1] - 1
     mz = dimf[2] - 1
 
+    if periodicx:
+        if px[ip] >= mx:
+            px[ip] = max(px[ip] - mx, 0.0)
+        elif px[ip] < 0:
+            px[ip] = min(px[ip] + mx, mx-dimfeps[0])
+    else:
+        if px[ip] < 0 or px[ip] >= mx:
+            px[ip] = np.nan
+
+    # y boundary condition
+    if periodicy:
+        if py[ip] >= my:
+            py[ip] = max(py[ip] - my, 0.0)
+        elif py[ip] < 0:
+            py[ip] = min(py[ip] + my, my-dimfeps[1])
+    else:
+        if py[ip] < 0 or py[ip] >= my:
+            py[ip] = np.nan
+
+    # z boundary condition
+    if periodicz:
+        if pz[ip] >= mz:
+            pz[ip] = max(pz[ip] - mz, 0.0)
+        elif pz[ip] < 0:
+            pz[ip] = min(pz[ip] + mz, mz-dimfeps[2])
+    else:
+        if pz[ip] < 0 or pz[ip] >= mz:
+            pz[ip] = np.nan
+    return
+
+
+@numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
+def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodicz):
+    """Given p, dimf; update p according to desired BCs for dimf
+    dimf = fld shape provided by user, NOT including ghost cells
+        for periodic bdry
+    """
     for ip in numba.prange(px.size):
-
-        if np.isnan(px[ip]) or np.isnan(py[ip]) or np.isnan(pz[ip]):
-            continue
-
-        # x boundary condition
-        if periodicx:
-            if px[ip] >= mx:
-                px[ip] = max(px[ip] - mx, 0.0)
-            elif px[ip] < 0:
-                px[ip] = min(px[ip] + mx, mx-dimfeps[0])
-        else:
-            if px[ip] < 0 or px[ip] >= mx:
-                px[ip] = np.nan
-
-        # y boundary condition
-        if periodicy:
-            if py[ip] >= my:
-                py[ip] = max(py[ip] - my, 0.0)
-            elif py[ip] < 0:
-                py[ip] = min(py[ip] + my, my-dimfeps[1])
-        else:
-            if py[ip] < 0 or py[ip] >= my:
-                py[ip] = np.nan
-
-        # z boundary condition
-        if periodicz:
-            if pz[ip] >= mz:
-                pz[ip] = max(pz[ip] - mz, 0.0)
-            elif pz[ip] < 0:
-                pz[ip] = min(pz[ip] + mz, mz-dimfeps[2])
-        else:
-            if pz[ip] < 0 or pz[ip] >= mz:
-                pz[ip] = np.nan
+        prtl_bc_one(
+            px,py,pz,ip,
+            dimf,dimfeps,periodicx,periodicy,periodicz
+        )
     return
 
 
