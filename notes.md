@@ -442,9 +442,23 @@ Option #2: re-order the loop, avoid special-case handling for first output
         output
         move...
 
+## more segfault troubleshooting
+
+Seeing segfaults when:
+
+    rm -r __pycache__/
+    NUMBA_NUM_THREADS=1 python user_mi400Ms4theta65.py  # caches
+    NUMBA_NUM_THREADS=10 python user_mi400Ms4theta65.py  # segfaults
+
+    rm -r __pycache__/
+    NUMBA_NUM_THREADS=10 python user_mi400Ms4theta65.py  # works
+
+Fixed by removing "cache=True" in all njit decorators.
+Maybe leaving cache=True on is not a good default.
+
 
 TODO/enhancement list
----------------------
+=====================
 
 * jitclass - do away with these long unwieldy function arglists?
 

@@ -205,7 +205,7 @@ def run_trochograph(user_input, user_flds, user_prtl):
 
 
 #boundscheck=True
-@numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
+@numba.njit(fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
 def mover(
         bx,by,bz,ex,ey,ez,
         px,py,pz,pu,pv,pw,
@@ -453,7 +453,7 @@ def mover(
 
 
 #boundscheck=True
-@numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
+@numba.njit(fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
 def interp(fld,x,y,z):
     """Linearly interpolate fld to input x,y,z position(s)
 
@@ -564,7 +564,7 @@ def add_ghost(fld, par):
     return fld
 
 
-@numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
+@numba.njit(fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
 def prtl_bc_one(px, py, pz, ip, dimf, dimfeps, periodicx, periodicy, periodicz):
     """Return x,y,z after applying BC"""
 
@@ -608,7 +608,7 @@ def prtl_bc_one(px, py, pz, ip, dimf, dimfeps, periodicx, periodicy, periodicz):
     return
 
 
-@numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
+@numba.njit(fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
 def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodicz):
     """Given p, dimf; update p according to desired BCs for dimf
     dimf = fld shape provided by user, NOT including ghost cells
