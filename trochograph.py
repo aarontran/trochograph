@@ -583,6 +583,9 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodi
 
     for ip in numba.prange(px.size):
 
+        if np.isnan(px[ip]) or np.isnan(py[ip]) or np.isnan(pz[ip]):
+            continue
+
         # x boundary condition
         if periodicx:
             #px[ip] = np.mod(px[ip], mx)  # modulo func is slow

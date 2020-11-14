@@ -350,3 +350,8 @@ Floor/ceil might introduce some subtle numerical bias?... but, I expect less
 than already-present floating pt noise.
 
 Result: BC wall-time cost remains ~same, compared to Nov 10 code, so OK.
+
+
+2020 Nov 13 - more prtl BC bugfixes
+-----------------------------------
+In prtl BC, skipping x,y,z=Nan prtl cuts BC time ~10%, from 2.32 to 2.05 sec.
