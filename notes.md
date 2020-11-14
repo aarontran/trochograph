@@ -354,6 +354,9 @@ Result: BC wall-time cost remains ~same, compared to Nov 10 code, so OK.
 
 2020 Nov 13 - more prtl BC bugfixes
 -----------------------------------
+
+## prtl BC bugfixes
+
 In prtl BC, skipping x,y,z=Nan prtl cuts BC time ~10%, from 2.32 to 2.05 sec.
 
 Another prtl BC bug: in domain check, accidentally did `>` instead of `>=` in:
@@ -384,3 +387,39 @@ New scheme:
     px[ip] = min(max(px[ip]-perx,0.0),mx-dimfeps[0])
 
 Result: same within 1% of prtl BC time or less (so ~0.1% of overall time).
+
+## inline prtl BC
+
+Have to do fastmath allowing nan (should have done this before?)
+
+Trial #1, with inlined.
+
+    rest laps 12.041153000000065
+      rest mover 10.712190000000113
+      rest bc 0.10611400000002251
+      rest output 1.222848999999808
+
+Trial #1, no inlined.  Improves ~20% over non-inlined, curiously.
+
+    rest laps 14.593378999999949
+      rest mover 11.17198300000004
+      rest bc 2.2264009999999668
+      rest output 1.1949949999997638
+
+Some minor editing in betwen (lost track of what exactly).
+
+Trial #2, with inlined.
+
+    rest laps 11.013614000000224
+      rest mover 9.75266900000005
+      rest bc 0.04573900000000523
+      rest output 1.2152059999997917
+
+Trial #2, no inlined.  Decent amount of fluctuation.
+
+    rest laps 14.056544999999907
+      rest mover 10.811355000000011
+      rest bc 2.058301999999985
+      rest output 1.1868879999997357
+
+OK, definitely want to inline... but, how to do right?

@@ -157,14 +157,16 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
             p.wtot,p.wprl,p.wx,p.wy,p.wz,
             p.ex,p.ey,p.ez,p.bx,p.by,p.bz,
             par['qm'],par['c'],
+            dimf,dimfeps,
+            par['periodicx'],par['periodicy'],par['periodicz']
         )
 
         tlap1 = datetime.now()
 
-        prtl_bc(
-            p.x,p.y,p.z,p.u,p.v,p.w,dimf,dimfeps,
-            par['periodicx'],par['periodicy'],par['periodicz']
-        )
+#        prtl_bc(
+#            p.x,p.y,p.z,p.u,p.v,p.w,dimf,dimfeps,
+#            par['periodicx'],par['periodicy'],par['periodicz']
+#        )
 
         user_prtl_bc(p.x,p.y,p.z,p.u,p.v,p.w,dimf)
 
@@ -219,17 +221,24 @@ def run_trochograph(user_input, user_flds, user_prtl, user_prtl_bc):
 
 
 #boundscheck=True
-@numba.njit(cache=True,fastmath=True,parallel=True)
+@numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
 def mover(
         bx,by,bz,ex,ey,ez,
         px,py,pz,pu,pv,pw,
         pwtot,pwprl,pwx,pwy,pwz,
         pex,pey,pez,pbx,pby,pbz,
-        qm,c
+        qm,c,
+        dimf,dimfeps,periodicx,periodicy,periodicz
 ):
     """Boris particle mover"""
 
     cinv=1./c
+
+    # domain [0,mx) x [0,my) x [0,mz) is strict,
+    # prtl at x=mx, y=my, z=mz will break prtl interp (index out of bounds)
+    mx = dimf[0] - 1  # prtl bdry, dimf with ghost cells
+    my = dimf[1] - 1
+    mz = dimf[2] - 1
 
     # Fortran/TRISTAN indexing convention
     #ix=1
@@ -449,6 +458,33 @@ def mover(
         py[ip] = py[ip] + pv[ip]*g*c
         pz[ip] = pz[ip] + pw[ip]*g*c
 
+        if periodicx:
+            if px[ip] >= mx:
+                px[ip] = max(px[ip] - mx, 0.0)
+            elif px[ip] < 0:
+                px[ip] = min(px[ip] + mx, mx-dimfeps[0])
+        else:
+            if px[ip] < 0 or px[ip] >= mx:
+                px[ip] = np.nan
+
+        if periodicy:
+            if py[ip] >= my:
+                py[ip] = max(py[ip] - my, 0.0)
+            elif py[ip] < 0:
+                py[ip] = min(py[ip] + my, my-dimfeps[1])
+        else:
+            if py[ip] < 0 or py[ip] >= my:
+                py[ip] = np.nan
+
+        if periodicz:
+            if pz[ip] >= mz:
+                pz[ip] = max(pz[ip] - mz, 0.0)
+            elif pz[ip] < 0:
+                pz[ip] = min(pz[ip] + mz, mz-dimfeps[2])
+        else:
+            if pz[ip] < 0 or pz[ip] >= mz:
+                pz[ip] = np.nan
+
         # Save fields used (NOTICE THAT THERE'S AN OFFSET!!!!!... fields used at PREVIOUS LOCATION, or "in-between" locations if you like)
         pex[ip] = ex0 / (0.5*qm)
         pey[ip] = ey0 / (0.5*qm)
@@ -461,7 +497,7 @@ def mover(
 
 
 #boundscheck=True
-@numba.njit(cache=True,fastmath=True,parallel=True)
+@numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
 def interp(fld,x,y,z):
     """Linearly interpolate fld to input x,y,z position(s)
 
@@ -572,7 +608,7 @@ def add_ghost(fld, par):
     return fld
 
 
-@numba.njit(cache=True,fastmath=True,parallel=True)
+@numba.njit(cache=True,fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
 def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodicz):
     """Given p, dimf; update p according to desired BCs for dimf
     dimf = fld shape provided by user, NOT including ghost cells
@@ -598,11 +634,6 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodi
         else:
             if px[ip] < 0 or px[ip] >= mx:
                 px[ip] = np.nan
-                py[ip] = np.nan
-                pz[ip] = np.nan
-                pu[ip] = np.nan
-                pv[ip] = np.nan
-                pw[ip] = np.nan
 
         # y boundary condition
         if periodicy:
@@ -612,12 +643,7 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodi
                 py[ip] = min(py[ip] + my, my-dimfeps[1])
         else:
             if py[ip] < 0 or py[ip] >= my:
-                px[ip] = np.nan
                 py[ip] = np.nan
-                pz[ip] = np.nan
-                pu[ip] = np.nan
-                pv[ip] = np.nan
-                pw[ip] = np.nan
 
         # z boundary condition
         if periodicz:
@@ -627,12 +653,7 @@ def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodi
                 pz[ip] = min(pz[ip] + mz, mz-dimfeps[2])
         else:
             if pz[ip] < 0 or pz[ip] >= mz:
-                px[ip] = np.nan
-                py[ip] = np.nan
                 pz[ip] = np.nan
-                pu[ip] = np.nan
-                pv[ip] = np.nan
-                pw[ip] = np.nan
     return
 
 
