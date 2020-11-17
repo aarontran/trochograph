@@ -564,7 +564,7 @@ def add_ghost(fld, par):
     return fld
 
 
-@numba.njit(fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
+@numba.njit(fastmath={'ninf','nsz','arcp','contract','afn','reassoc'})#,parallel=True)
 def prtl_bc_one(px, py, pz, ip, dimf, dimfeps, periodicx, periodicy, periodicz):
     """Return x,y,z after applying BC"""
 
