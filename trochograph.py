@@ -106,8 +106,9 @@ def run_trochograph(user_input, user_flds, user_prtl):
     tprint("Pre-enforce prtl BCs")
 
     prtl_bc(
-        p.x,p.y,p.z,p.u,p.v,p.w,dimf,dimfeps,
-        par['periodicx'],par['periodicy'],par['periodicz']
+        p.x,p.y,p.z,p.u,p.v,p.w,par['c'],dimf,dimfeps,
+        #par['periodicx'],par['periodicy'],par['periodicz']
+        par['boundary_xl'],par['boundary_xr'],par['periodicy'],par['periodicz']
     )
 
     # -----------------------------------------
@@ -155,7 +156,8 @@ def run_trochograph(user_input, user_flds, user_prtl):
             p.ex,p.ey,p.ez,p.bx,p.by,p.bz,
             par['qm'],par['c'],
             dimf,dimfeps,
-            par['periodicx'],par['periodicy'],par['periodicz']
+            #par['periodicx'],par['periodicy'],par['periodicz']
+            par['boundary_xl'],par['boundary_xr'],par['periodicy'],par['periodicz']
         )
 
         tlap1 = datetime.now()
@@ -212,7 +214,8 @@ def mover(
         pwtot,pwprl,pwx,pwy,pwz,
         pex,pey,pez,pbx,pby,pbz,
         qm,c,
-        dimf,dimfeps,periodicx,periodicy,periodicz
+        dimf,dimfeps,#periodicx,periodicy,periodicz
+        boundary_xl,boundary_xr,periodicy,periodicz
 ):
     """Boris particle mover"""
 
@@ -437,8 +440,9 @@ def mover(
         pz[ip] = pz[ip] + pw[ip]*g*c
 
         prtl_bc_one(
-            px,py,pz,ip,
-            dimf,dimfeps,periodicx,periodicy,periodicz
+            ip,px,py,pz,pu,pv,pw,c,
+            dimf,dimfeps,#periodicx,periodicy,periodicz
+            boundary_xl,boundary_xr,periodicy,periodicz
         )
 
         # Save fields used (NOTICE THAT THERE'S AN OFFSET!!!!!... fields used at PREVIOUS LOCATION, or "in-between" locations if you like)
@@ -552,7 +556,8 @@ def add_ghost(fld, par):
     Attach ghost cells to far edges of fld for periodic boundaries
     Returns copy of fld; input array is not modified
     """
-    if par['periodicx']:
+    #if par['periodicx']:
+    if par['boundary_xl'] == "periodic" and par['boundary_xr'] == "periodic":
         #fld = np.concatenate((fld[-1:,:,:], fld, fld[0:1,:,:]), axis=0)
         fld = np.concatenate((fld, fld[0:1,:,:]), axis=0)
     if par['periodicy']:
@@ -565,7 +570,8 @@ def add_ghost(fld, par):
 
 
 @numba.njit(fastmath={'ninf','nsz','arcp','contract','afn','reassoc'})#,parallel=True)
-def prtl_bc_one(px, py, pz, ip, dimf, dimfeps, periodicx, periodicy, periodicz):
+#def prtl_bc_one(px, py, pz, ip, dimf, dimfeps, periodicx, periodicy, periodicz):
+def prtl_bc_one(ip, px, py, pz, pu, pv, pw, c, dimf, dimfeps, boundary_xl, boundary_xr, periodicy, periodicz):
     """Return x,y,z after applying BC"""
 
     if np.isnan(px[ip]) or np.isnan(py[ip]) or np.isnan(pz[ip]):
@@ -577,13 +583,63 @@ def prtl_bc_one(px, py, pz, ip, dimf, dimfeps, periodicx, periodicy, periodicz):
     my = dimf[1] - 1
     mz = dimf[2] - 1
 
-    if periodicx:
-        if px[ip] >= mx:
-            px[ip] = max(px[ip] - mx, 0.0)
-        elif px[ip] < 0:
+    # x boundary condition
+    #if periodicx:
+    #    if px[ip] >= mx:
+    #        px[ip] = max(px[ip] - mx, 0.0)
+    #    elif px[ip] < 0:
+    #        px[ip] = min(px[ip] + mx, mx-dimfeps[0])
+    #else:
+    #    if px[ip] < 0 or px[ip] >= mx:
+    #        px[ip] = np.nan
+    if px[ip] < 0:
+        if boundary_xl == "periodic":
             px[ip] = min(px[ip] + mx, mx-dimfeps[0])
-    else:
-        if px[ip] < 0 or px[ip] >= mx:
+        elif boundary_xl == "outflow":
+            px[ip] = np.nan
+        elif boundary_xl == "reflect":
+
+            # adapted from tristan-mp_xshock/user_shock_twowalls.F90
+            # currently implemented for walloc=0, betawall=0 only
+
+            #this algorithm ignores change in y and z coordinates
+            #during the scattering. Including it can result in rare
+            #conditions where a particle gets stuck in the ghost zones.
+            #This can be improved.
+
+            gamma=(1+pu[ip]**2+pv[ip]**2+pw[ip]**2)**0.5
+
+            # unwind x location of particle
+            x0=px[ip]-pu[ip]/gamma*c
+            y0=py[ip] #-pv[ip]/gamma*c
+            z0=pz[ip] #-pw[ip]/gamma*c
+            # unwind wall location
+            walloc0 = 0.0  # wallloc - betawall*c  # see also code logic px[ip] < 0...
+
+            # where did they meet?
+            tfrac=min(abs((x0-walloc0)/max(abs(pu[ip]/gamma*c),1e-9)),1.)
+            xcolis=x0+pu[ip]/gamma*c*tfrac
+            ycolis=y0 #+pv[ip]/gamma*c*tfrac
+            zcolis=z0 #+pw[ip]/gamma*c*tfrac
+
+            # reset particle momentum, getting a kick from the wall
+            #pu[ip] = gammawall**2*gamma*(2*betawall - pu[ip]/gamma*(1+betawall**2))
+            #gamma=(1+pu[ip]**2+pv[ip]**2+pw[ip]**2)**0.5
+            pu[ip] = -1*pu[ip]
+
+            #move particle from the wall position with the new velocity
+            tfrac=min(abs((px[ip]-xcolis)/max(abs(px[ip]-x0),1e-9)),1.)
+            px[ip] = xcolis + pu[ip]/gamma*c * tfrac
+            py[ip] = ycolis #+ pv[ip]/gamma*c * tfrac
+            pz[ip] = zcolis #+ pw[ip]/gamma*c * tfrac
+
+    if px[ip] >= mx:
+        if boundary_xr == "periodic":
+            px[ip] = max(px[ip] - mx, 0.0)
+        elif boundary_xr == "outflow":
+            px[ip] = np.nan
+        elif boundary_xr == "reflect":
+            ## not implemented...
             px[ip] = np.nan
 
     # y boundary condition
@@ -609,15 +665,17 @@ def prtl_bc_one(px, py, pz, ip, dimf, dimfeps, periodicx, periodicy, periodicz):
 
 
 @numba.njit(fastmath={'ninf','nsz','arcp','contract','afn','reassoc'},parallel=True)
-def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodicz):
+#def prtl_bc(px, py, pz, pu, pv, pw, dimf, dimfeps, periodicx, periodicy, periodicz):
+def prtl_bc(px, py, pz, pu, pv, pw, c, dimf, dimfeps, boundary_xl, boundary_xr, periodicy, periodicz):
     """Given p, dimf; update p according to desired BCs for dimf
     dimf = fld shape provided by user, NOT including ghost cells
         for periodic bdry
     """
     for ip in numba.prange(px.size):
         prtl_bc_one(
-            px,py,pz,ip,
-            dimf,dimfeps,periodicx,periodicy,periodicz
+            ip,px,py,pz,pu,pv,pw,c,
+            #dimf,dimfeps,periodicx,periodicy,periodicz
+            dimf,dimfeps,boundary_xl,boundary_xr,periodicy,periodicz
         )
     return
 
